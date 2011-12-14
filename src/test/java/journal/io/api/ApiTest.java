@@ -61,7 +61,7 @@ public class ApiTest {
 
     @Before
     public void setUp() throws Exception {
-        JOURNAL_DIR = File.createTempFile("hawtjournal", "dir", null);
+        JOURNAL_DIR = File.createTempFile("journal", "dir", null);
         JOURNAL_DIR.delete();
         JOURNAL_DIR.mkdir();
     }
