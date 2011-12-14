@@ -50,7 +50,7 @@ import static journal.io.util.LogHelper.*;
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
  */
-public class Journal implements Iterable<Location> {
+public class Journal {
 
     static final int RECORD_POINTER_SIZE = 4;
     static final int RECORD_LENGTH_SIZE = 4;
@@ -266,54 +266,20 @@ public class Journal implements Iterable<Location> {
     }
 
     /**
-     * Return an iterator to replay the journal by going through all records locations.
-     *
+     * Return an iterable to replay the journal by going through all records locations.
      * @return
      */
-    public Iterator<Location> iterator() {
-        return new Iterator<Location>() {
+    public Iterable<Location> redo() throws IOException {
+        return new Redo(goToFirstLocation(dataFiles.firstEntry().getValue(), Location.USER_RECORD_TYPE, true));
+    }
 
-            private Location next = init();
-
-            public boolean hasNext() {
-                return next != null;
-            }
-
-            public Location next() {
-                if (next != null) {
-                    try {
-                        Location current = next;
-                        next = goToNextLocation(current, Location.USER_RECORD_TYPE, true);
-                        return current;
-                    } catch (IOException ex) {
-                        throw new IllegalStateException(ex.getMessage(), ex);
-                    }
-                } else {
-                    throw new IllegalStateException("No next location!");
-                }
-            }
-
-            public void remove() {
-                if (next != null) {
-                    try {
-                        delete(next);
-                    } catch (IOException ex) {
-                        throw new IllegalStateException(ex.getMessage(), ex);
-                    }
-                } else {
-                    throw new IllegalStateException("No location to remove!");
-                }
-            }
-
-            private Location init() {
-                try {
-                    return goToFirstLocation(dataFiles.firstEntry().getValue(), Location.USER_RECORD_TYPE, true);
-                } catch (IOException ex) {
-                    throw new IllegalStateException(ex.getMessage(), ex);
-                }
-            }
-
-        };
+    /**
+     * Return an iterable to replay the journal by going through all records locations starting from the given one.
+     * @param start
+     * @return
+     */
+    public Iterable<Location> redo(Location start) throws IOException {
+        return new Redo(start);
     }
 
     /**
@@ -685,6 +651,54 @@ public class Journal implements Iterable<Location> {
             }
         }
         return currentUserRecord;
+    }
+
+    public class Redo implements Iterable<Location> {
+
+        private final Location start;
+
+        public Redo(Location start) {
+            this.start = start;
+        }
+
+        public Iterator<Location> iterator() {
+            return new Iterator<Location>() {
+
+                private Location next = start;
+
+                public boolean hasNext() {
+                    return next != null;
+                }
+
+                public Location next() {
+                    if (next != null) {
+                        try {
+                            Location current = next;
+                            next = goToNextLocation(current, Location.USER_RECORD_TYPE, true);
+                            return current;
+                        } catch (IOException ex) {
+                            throw new IllegalStateException(ex.getMessage(), ex);
+                        }
+                    } else {
+                        throw new IllegalStateException("No next location!");
+                    }
+                }
+
+                public void remove() {
+                    if (next != null) {
+                        try {
+                            delete(next);
+                        } catch (IOException ex) {
+                            throw new IllegalStateException(ex.getMessage(), ex);
+                        }
+                    } else {
+                        throw new IllegalStateException("No location to remove!");
+                    }
+                }
+
+            };
+        }
+
     }
 
     static class WriteBatch {

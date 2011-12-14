@@ -74,7 +74,7 @@ public class JournalTest {
             journal.write(new String("DATA" + i).getBytes("UTF-8"), true);
         }
         int i = 0;
-        for (Location location : journal) {
+        for (Location location : journal.redo()) {
             byte[] buffer = journal.read(location, false);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
@@ -87,7 +87,7 @@ public class JournalTest {
             journal.write(new String("DATA" + i).getBytes("UTF-8"), false);
         }
         int i = 0;
-        for (Location location : journal) {
+        for (Location location : journal.redo()) {
             byte[] buffer = journal.read(location, false);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
@@ -101,10 +101,26 @@ public class JournalTest {
             journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
         int i = 0;
-        for (Location location : journal) {
+        for (Location location : journal.redo()) {
             byte[] buffer = journal.read(location, false);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
+    }
+    
+    @Test
+    public void testReplayFromLocation() throws Exception {
+        int iterations = 10;
+        Location latest = null;
+        for (int i = 0; i < iterations; i++) {
+            latest = journal.write(new String("DATA" + i).getBytes("UTF-8"), true);
+        }
+        int i = 0;
+        for (Location location : journal.redo(latest)) {
+            byte[] buffer = journal.read(location, false);
+            assertEquals("DATA9", new String(buffer, "UTF-8"));
+            i++;
+        }
+        assertEquals(1, i);
     }
 
     @Test
@@ -126,7 +142,7 @@ public class JournalTest {
         }
         //
         int index = 0;
-        for (Location location : journal) {
+        for (Location location : journal.redo()) {
             byte[] buffer = journal.read(location, false);
             assertEquals("DATA" + index++, new String(buffer, "UTF-8"));
         }
@@ -141,7 +157,7 @@ public class JournalTest {
             journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
         int i = 0;
-        for (Location location : journal) {
+        for (Location location : journal.redo()) {
             byte[] buffer = journal.read(location, false);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
@@ -165,7 +181,7 @@ public class JournalTest {
         assertTrue(journal.getFiles().size() < preCleanupFiles);
         //
         int i = iterations / 2;
-        for (Location location : journal) {
+        for (Location location : journal.redo()) {
             byte[] buffer = journal.read(location, false);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
@@ -323,7 +339,7 @@ public class JournalTest {
         assertTrue(executor.awaitTermination(1, TimeUnit.MINUTES));
         assertEquals(iterations, counter.get());
         int locations = 0;
-        for (Location current : journal) {
+        for (Location current : journal.redo()) {
             locations++;
         }
         assertEquals(iterations - (iterations / 4), locations);
