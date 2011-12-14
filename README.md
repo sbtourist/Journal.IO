@@ -65,6 +65,10 @@ Sync durability happens during sync points, providing higher durability guarante
 Finally, physical sync durability provides the highest durability guarantees at the expense of a greater performance cost, flushing on disk hardware buffers at every sync point: 
 disabled by default, it can be enabled by setting _Journal#setPhysicalSync_ true.
 
+## Feedback
+
+A mailing list will be created soon; in the meantime, for any kind of feedback please contact [me](http://www.twitter.com/sbtourist) on Twitter.
+
 ## License
 
 Distributed under the [Apache Software License](http://www.apache.org/licenses/LICENSE-2.0.html).
