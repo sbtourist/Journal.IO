@@ -550,7 +550,7 @@ public class Journal implements Iterable<Location> {
         return nextWriteFile;
     }
 
-    public Location getLastAppendLocation() {
+    Location getLastAppendLocation() {
         return lastAppendLocation;
     }
 
@@ -763,12 +763,11 @@ public class Journal implements Iterable<Location> {
             }
 
             // Now we can fill in the batch control record properly.
-            byte[] backingArray = buffer.array();
             buffer.position(Journal.HEADER_SIZE);
             buffer.putInt(size - Journal.BATCH_CONTROL_RECORD_SIZE);
             if (checksum) {
                 Checksum adler32 = new Adler32();
-                adler32.update(backingArray,
+                adler32.update(buffer.array(),
                         Journal.BATCH_CONTROL_RECORD_SIZE,
                         size - Journal.BATCH_CONTROL_RECORD_SIZE);
                 buffer.putLong(adler32.getValue());
@@ -776,7 +775,7 @@ public class Journal implements Iterable<Location> {
 
             // Now do the 1 big write.
             file.seek(offset);
-            file.write(backingArray, 0, size);
+            file.write(buffer.array(), 0, size);
 
             if (physicalSync) {
                 IOHelper.sync(file.getFD());
@@ -791,7 +790,7 @@ public class Journal implements Iterable<Location> {
             }
             try {
                 if (replicator != null) {
-                    replicator.replicate(control.location, backingArray);
+                    replicator.replicate(control.location, buffer.array());
                 }
             } catch (Throwable ex) {
                 warn("Cannot replicate!", ex);
