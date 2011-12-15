@@ -65,6 +65,25 @@ Sync durability happens during sync points, providing higher durability guarante
 Finally, physical sync durability provides the highest durability guarantees at the expense of a greater performance cost, flushing on disk hardware buffers at every sync point: 
 disabled by default, it can be enabled by setting _Journal#setPhysicalSync_ true.
 
+## Download
+
+Journal.IO is a self-contained jar you can download from the Downloads section above.
+
+If you're a Maven user, you can also configure it on your project by importing the repository:
+
+    <repository>
+        <id>Journal.IO</id>
+        <url>http://github.com/sbtourist/Journal.IO/tree/master/m2/repo</url>
+    </repository>
+
+And then declaring the dependency:
+
+    <dependency>
+        <groupId>journalio</groupId>
+       <artifactId>journalio</artifactId>
+       <version>1.0</version>
+    </dependency>
+
 ## Feedback
 
 A mailing list will be created soon; in the meantime, for any kind of feedback please contact [me](http://www.twitter.com/sbtourist) on Twitter.
