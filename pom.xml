@@ -50,7 +50,7 @@
         </repository>
     </distributionManagement>
     <scm>
-        <developerConnection>scm:git:https://sbtourist@github.com/sbtourist/Journal.IO.git</developerConnection>
+        <developerConnection>scm:git:git://sbtourist@github.com/sbtourist/Journal.IO.git</developerConnection>
     </scm>
     <build>
         <plugins>
