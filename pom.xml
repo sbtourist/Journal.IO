@@ -42,6 +42,13 @@
             <timezone>GMT-5</timezone>
         </developer>
     </developers>
+    <distributionManagement>
+        <repository>
+            <id>journalio-repo</id>
+            <name>journalio-repo</name>
+            <url>file:m2/repo</url>
+        </repository>
+    </distributionManagement>
     <build>
         <plugins>
             <plugin>
@@ -51,6 +58,19 @@
                 <configuration>
                     <source>1.6</source>
                     <target>1.6</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.google.code.maven-license-plugin</groupId>
+                <artifactId>maven-license-plugin</artifactId>
+                <version>1.4.0</version>
+                <configuration>
+                    <header>header.txt</header>
+                    <aggregate>true</aggregate>
+                    <encoding>UTF-8</encoding>
+                    <includes>
+                        <include>**/*.java</include>
+                    </includes>
                 </configuration>
             </plugin>
         </plugins>
