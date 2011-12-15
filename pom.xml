@@ -49,6 +49,9 @@
             <url>file:m2/repo</url>
         </repository>
     </distributionManagement>
+    <scm>
+        <developerConnection>scm:git:git@github.com:sbtourist/Journal.IO.git</developerConnection>
+    </scm>
     <build>
         <plugins>
             <plugin>
