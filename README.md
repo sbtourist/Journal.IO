@@ -73,7 +73,7 @@ If you're a Maven user, you can also configure it on your project by importing t
 
     <repository>
         <id>Journal.IO</id>
-        <url>http://github.com/sbtourist/Journal.IO/tree/master/m2/repo</url>
+        <url>https://raw.github.com/sbtourist/Journal.IO/master/m2/repo</url>
     </repository>
 
 And then declaring the dependency:
