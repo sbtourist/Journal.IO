@@ -276,6 +276,10 @@ public class Journal {
     public Iterable<Location> redo(Location start) throws IOException {
         return new Redo(start);
     }
+    
+    public Iterable<Location> undo() throws IOException {
+      return new Undo(redo());
+    }
 
     /**
      * Get the files part of this journal.
@@ -693,7 +697,67 @@ public class Journal {
 
             };
         }
+    }
 
+    static class Undo implements Iterable<Location> {
+        private final Object[] stack;
+        private final int start;
+  
+        public Undo(Iterable<Location> redo) {
+            // Object arrays of 14 are about the size of a cache-line (64 bytes)
+            // or two, depending on the oops-size.
+            Object[] stack = new Object[14];
+            // the last element of the arrays refer to the next "fat node."
+            // the last element of the last node is null as an end-mark
+            int pointer = 12;
+            Iterator<Location> itr = redo.iterator();
+            while (itr.hasNext()) {
+                Location location = itr.next();
+                stack[pointer] = location;
+                if (pointer == 0) {
+                    Object[] tmp = new Object[14];
+                    tmp[13] = stack;
+                    stack = tmp;
+                    pointer = 12;
+                } else {
+                    pointer--;
+                }
+            }
+            this.start = pointer + 1; // +1 to go back to last write
+            this.stack = stack;
+        }
+  
+        @Override
+        public Iterator<Location> iterator() {
+            return new Iterator<Location>() {
+                private int pointer = start;
+                private Object[] ref = stack;
+      
+                @Override
+                public boolean hasNext() {
+                    return ref[pointer] != null;
+                }
+      
+                @Override
+                public Location next() {
+                    if (ref == null) {
+                        throw new NoSuchElementException();
+                    }
+                    Object next = ref[pointer];
+                    if (!(ref[pointer] instanceof Location)) {
+                        ref = (Object[]) ref[pointer];
+                        pointer = 0;
+                        return next();
+                    }
+                    pointer++;
+                    return (Location) next;
+                }
+      
+                @Override
+                public void remove() {
+                }
+            };
+        }
     }
 
     static class WriteBatch {
