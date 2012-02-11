@@ -27,9 +27,7 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -677,7 +675,7 @@ public class Journal {
                             throw new IllegalStateException(ex.getMessage(), ex);
                         }
                     } else {
-                        throw new IllegalStateException("No next location!");
+                        throw new NoSuchElementException("No next location!");
                     }
                 }
 
