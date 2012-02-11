@@ -93,49 +93,73 @@ public class JournalTest {
     }
     
     @Test
+    public void testRedoOnEmptyJournal() throws Exception {
+        Iterator<Location> itr = journal.redo().iterator();
+        assertFalse(itr.hasNext());
+        try {
+            itr.next();
+            fail("should have thrown");
+        } catch (Exception e) {
+            assertTrue(e instanceof NoSuchElementException);
+        }
+    }
+    
+    @Test
     public void testUndoMustTraverseLogInReverseOrder() throws Exception {
-      journal.write("DATA1".getBytes("UTF-8"), false);
-      journal.write("DATA2".getBytes("UTF-8"), false);
-      journal.write("DATA3".getBytes("UTF-8"), false);
-      Iterator<Location> itr = journal.undo().iterator();
-      assertTrue(itr.hasNext());
-      assertEquals("DATA3", new String(journal.read(itr.next(), false), "UTF-8"));
-      assertEquals("DATA2", new String(journal.read(itr.next(), false), "UTF-8"));
-      assertEquals("DATA1", new String(journal.read(itr.next(), false), "UTF-8"));
-      assertFalse(itr.hasNext());
+        journal.write("DATA1".getBytes("UTF-8"), false);
+        journal.write("DATA2".getBytes("UTF-8"), false);
+        journal.write("DATA3".getBytes("UTF-8"), false);
+        Iterator<Location> itr = journal.undo().iterator();
+        assertTrue(itr.hasNext());
+        assertEquals("DATA3", new String(journal.read(itr.next(), false), "UTF-8"));
+        assertEquals("DATA2", new String(journal.read(itr.next(), false), "UTF-8"));
+        assertEquals("DATA1", new String(journal.read(itr.next(), false), "UTF-8"));
+        assertFalse(itr.hasNext());
     }
     
     @Test
     public void testUndoDoesNotTakeNewWritesIntoAccount() throws Exception {
-      journal.write("A".getBytes("UTF-8"), false);
-      journal.write("B".getBytes("UTF-8"), false);
-      Iterable<Location> undo = journal.undo();
-      journal.write("C".getBytes("UTF-8"), false);
-      Iterator<Location> locs = undo.iterator();
-      assertEquals("B", new String(journal.read(locs.next(), false), "UTF-8"));
-      assertEquals("A", new String(journal.read(locs.next(), false), "UTF-8"));
-      assertFalse(locs.hasNext());
+        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("B".getBytes("UTF-8"), false);
+        Iterable<Location> undo = journal.undo();
+        journal.write("C".getBytes("UTF-8"), false);
+        Iterator<Location> locs = undo.iterator();
+        assertEquals("B", new String(journal.read(locs.next(), false), "UTF-8"));
+        assertEquals("A", new String(journal.read(locs.next(), false), "UTF-8"));
+        assertFalse(locs.hasNext());
     }
     
     @Test
     public void testUndoingLargeChunkOfData() throws Exception {
-      byte parts = 127;
-      for (byte i = 0; i < parts; i++) {
-        journal.write(new byte[] {i}, false);
-      }
-      Iterator<Location> locs = journal.undo().iterator();
-      while (parts > 0) {
-        Location loc = locs.next();
-        assertArrayEquals(new byte[] {--parts}, journal.read(loc));
-      }
+        byte parts = 127;
+        for (byte i = 0; i < parts; i++) {
+            journal.write(new byte[] {i}, false);
+        }
+        Iterator<Location> locs = journal.undo().iterator();
+        while (parts > 0) {
+            Location loc = locs.next();
+            assertArrayEquals(new byte[] {--parts}, journal.read(loc));
+        }
     }
     
     @Test(expected = NoSuchElementException.class)
     public void testUndoingPastStartWillThrowException() throws Exception {
-      journal.write(new byte[] {1}, false);
-      Iterator<Location> itr = journal.undo().iterator();
-      itr.next();
-      itr.next();
+        journal.write(new byte[] {1}, false);
+        Iterator<Location> itr = journal.undo().iterator();
+        itr.next();
+        itr.next();
+    }
+    
+    @Test
+    public void testUndoingAnEmptyJournal() throws Exception {
+        Iterator<Location> itr = journal.undo().iterator();
+        assertFalse(itr.hasNext());
+        try {
+            itr.next();
+            fail("should have thrown");
+        } catch (Exception e) {
+            assertTrue(e instanceof NoSuchElementException);
+        }
     }
     // TODO the same undo tests but with a specified start location
     // TODO deleting through the undo iterator

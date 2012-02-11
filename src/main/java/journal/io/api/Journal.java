@@ -21,6 +21,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.Iterator;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.io.File;
 import java.io.FilenameFilter;
@@ -265,7 +266,11 @@ public class Journal {
      * @return
      */
     public Iterable<Location> redo() throws IOException {
-        return new Redo(goToFirstLocation(dataFiles.firstEntry().getValue(), Location.USER_RECORD_TYPE, true));
+        Entry<Integer, DataFile> firstEntry = dataFiles.firstEntry();
+        if (firstEntry == null) {
+            return new Redo(null);
+        }
+        return new Redo(goToFirstLocation(firstEntry.getValue(), Location.USER_RECORD_TYPE, true));
     }
 
     /**
@@ -740,12 +745,12 @@ public class Journal {
       
                 @Override
                 public Location next() {
-                    if (ref == null) {
-                        throw new NoSuchElementException();
-                    }
                     Object next = ref[pointer];
                     if (!(ref[pointer] instanceof Location)) {
                         ref = (Object[]) ref[pointer];
+                        if (ref == null) {
+                          throw new NoSuchElementException();
+                        }
                         pointer = 0;
                         return next();
                     }
