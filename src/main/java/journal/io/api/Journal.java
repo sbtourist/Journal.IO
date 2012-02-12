@@ -282,10 +282,25 @@ public class Journal {
         return new Redo(start);
     }
     
+    /**
+     * Return an iterable to replay the journal in reverse, starting with the
+     * newest location and ending with the first. The iterable does not include
+     * future writes - writes that happen after its creation.
+     * @return
+     * @throws IOException
+     */
     public Iterable<Location> undo() throws IOException {
       return new Undo(redo());
     }
 
+    /**
+     * Return an iterable to replay the journal in reverse, starting with the
+     * newest location and ending with the specified end location. The iterable
+     * does not include future writes - writes that happen after its creation.
+     * @param end
+     * @return
+     * @throws IOException
+     */
     public Iterable<Location> undo(Location end) throws IOException {
       return new Undo(redo(end));
     }
