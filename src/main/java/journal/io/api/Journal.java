@@ -728,21 +728,21 @@ public class Journal {
         private final int start;
   
         public Undo(Iterable<Location> redo) {
-            // Object arrays of 14 are about the size of a cache-line (64 bytes)
+            // Object arrays of 12 are about the size of a cache-line (64 bytes)
             // or two, depending on the oops-size.
-            Object[] stack = new Object[14];
+            Object[] stack = new Object[12];
             // the last element of the arrays refer to the next "fat node."
             // the last element of the last node is null as an end-mark
-            int pointer = 12;
+            int pointer = 10;
             Iterator<Location> itr = redo.iterator();
             while (itr.hasNext()) {
                 Location location = itr.next();
                 stack[pointer] = location;
                 if (pointer == 0) {
-                    Object[] tmp = new Object[14];
-                    tmp[13] = stack;
+                    Object[] tmp = new Object[12];
+                    tmp[11] = stack;
                     stack = tmp;
-                    pointer = 12;
+                    pointer = 10;
                 } else {
                     pointer--;
                 }
