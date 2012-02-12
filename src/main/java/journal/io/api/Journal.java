@@ -286,6 +286,10 @@ public class Journal {
       return new Undo(redo());
     }
 
+    public Iterable<Location> undo(Location end) throws IOException {
+      return new Undo(redo(end));
+    }
+
     /**
      * Get the files part of this journal.
      * @return
