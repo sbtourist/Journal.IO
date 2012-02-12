@@ -164,25 +164,53 @@ public class JournalTest {
     
     @Test
     public void testUndoingFromLastWriteIteratesOneLocation() throws Exception {
-      Location loc = journal.write(new byte[] {23}, false);
-      Iterator<Location> itr = journal.undo(loc).iterator();
-      assertArrayEquals(new byte[] {23}, journal.read(itr.next()));
-      assertFalse(itr.hasNext());
+        Location loc = journal.write(new byte[] {23}, false);
+        Iterator<Location> itr = journal.undo(loc).iterator();
+        assertArrayEquals(new byte[] {23}, journal.read(itr.next()));
+        assertFalse(itr.hasNext());
     }
     
     @Test
     public void testUndoIteratorStopsAtEnd() throws Exception {
-      journal.write(new byte[] {11}, false);
-      Location end = journal.write(new byte[] {12}, false);
-      journal.write(new byte[] {13}, false);
-      Iterator<Location> itr = journal.undo(end).iterator();
-      assertArrayEquals(new byte[] {13}, journal.read(itr.next()));
-      assertArrayEquals(new byte[] {12}, journal.read(itr.next()));
-      assertFalse(itr.hasNext());
+        journal.write(new byte[] {11}, false);
+        Location end = journal.write(new byte[] {12}, false);
+        journal.write(new byte[] {13}, false);
+        Iterator<Location> itr = journal.undo(end).iterator();
+        assertArrayEquals(new byte[] {13}, journal.read(itr.next()));
+        assertArrayEquals(new byte[] {12}, journal.read(itr.next()));
+        assertFalse(itr.hasNext());
     }
     
+    @Test
+    public void testCanDeleteThroughUndo() throws Exception {
+        journal.write(new byte[] {11}, false);
+        journal.write(new byte[] {12}, false);
+        journal.write(new byte[] {13}, false);
+        Iterator<Location> itr = journal.undo().iterator();
+        itr.next();
+        itr.remove();
+        itr = journal.undo().iterator();
+        assertArrayEquals(new byte[] {12}, journal.read(itr.next()));
+        assertArrayEquals(new byte[] {11}, journal.read(itr.next()));
+        assertFalse(itr.hasNext());
+    }
     
-    // TODO deleting through the undo iterator
+    @Test(expected = IllegalStateException.class)
+    public void testThrowIllegalStateIfTheSameLocationIsRemovedThroughUndoMoreThanOnce() throws Exception {
+        journal.write(new byte[] {11}, false);
+        journal.write(new byte[] {12}, false);
+        Iterator<Location> itr = journal.undo().iterator();
+        itr.next();
+        itr.remove();
+        itr.remove();
+    }
+    
+    @Test(expected = IllegalStateException.class)
+    public void testThrowIllegalStateIfCallingRemoveBeforeNext() throws Exception {
+        journal.write(new byte[] {11}, false);
+        Iterator<Location> itr = journal.undo().iterator();
+        itr.remove();
+    }
 
     @Test
     public void testMixedSyncAsyncLogWritingAndReplaying() throws Exception {

@@ -661,7 +661,7 @@ public class Journal {
         return currentUserRecord;
     }
 
-    public class Redo implements Iterable<Location> {
+    private class Redo implements Iterable<Location> {
 
         private final Location start;
 
@@ -708,7 +708,7 @@ public class Journal {
         }
     }
 
-    static class Undo implements Iterable<Location> {
+    private class Undo implements Iterable<Location> {
         private final Object[] stack;
         private final int start;
   
@@ -741,6 +741,7 @@ public class Journal {
             return new Iterator<Location>() {
                 private int pointer = start;
                 private Object[] ref = stack;
+                private Location current;
       
                 @Override
                 public boolean hasNext() {
@@ -759,11 +760,20 @@ public class Journal {
                         return next();
                     }
                     pointer++;
-                    return (Location) next;
+                    return current = (Location) next;
                 }
       
                 @Override
                 public void remove() {
+                    if (current == null) {
+                        throw new IllegalStateException("No location to remove!");
+                    }
+                    try {
+                        delete(current);
+                        current = null;
+                    } catch (IOException e) {
+                        throw new IllegalStateException(e.getMessage(), e);
+                    }
                 }
             };
         }
