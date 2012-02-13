@@ -1,26 +1,26 @@
 /**
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
  */
 package journal.io.api;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.io.File;
-import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
@@ -91,7 +91,7 @@ public class JournalTest {
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
     }
-    
+
     @Test
     public void testRedoOnEmptyJournal() throws Exception {
         Iterator<Location> itr = journal.redo().iterator();
@@ -103,7 +103,7 @@ public class JournalTest {
             assertTrue(e instanceof NoSuchElementException);
         }
     }
-    
+
     @Test
     public void testUndoMustTraverseLogInReverseOrder() throws Exception {
         journal.write("DATA1".getBytes("UTF-8"), false);
@@ -116,7 +116,7 @@ public class JournalTest {
         assertEquals("DATA1", new String(journal.read(itr.next(), false), "UTF-8"));
         assertFalse(itr.hasNext());
     }
-    
+
     @Test
     public void testUndoDoesNotTakeNewWritesIntoAccount() throws Exception {
         journal.write("A".getBytes("UTF-8"), false);
@@ -128,28 +128,28 @@ public class JournalTest {
         assertEquals("A", new String(journal.read(locs.next(), false), "UTF-8"));
         assertFalse(locs.hasNext());
     }
-    
+
     @Test
     public void testUndoingLargeChunksOfData() throws Exception {
         byte parts = 127;
         for (byte i = 0; i < parts; i++) {
-            journal.write(new byte[] {i}, false);
+            journal.write(new byte[]{i}, false);
         }
         Iterator<Location> locs = journal.undo().iterator();
         while (parts > 0) {
             Location loc = locs.next();
-            assertArrayEquals(new byte[] {--parts}, journal.read(loc));
+            assertArrayEquals(new byte[]{--parts}, journal.read(loc));
         }
     }
-    
+
     @Test(expected = NoSuchElementException.class)
     public void testUndoingPastStartWillThrowException() throws Exception {
-        journal.write(new byte[] {1}, false);
+        journal.write(new byte[]{1}, false);
         Iterator<Location> itr = journal.undo().iterator();
         itr.next();
         itr.next();
     }
-    
+
     @Test
     public void testUndoingAnEmptyJournal() throws Exception {
         Iterator<Location> itr = journal.undo().iterator();
@@ -161,53 +161,53 @@ public class JournalTest {
             assertTrue(e instanceof NoSuchElementException);
         }
     }
-    
+
     @Test
     public void testUndoingFromLastWriteIteratesOneLocation() throws Exception {
-        Location loc = journal.write(new byte[] {23}, false);
+        Location loc = journal.write(new byte[]{23}, false);
         Iterator<Location> itr = journal.undo(loc).iterator();
-        assertArrayEquals(new byte[] {23}, journal.read(itr.next()));
+        assertArrayEquals(new byte[]{23}, journal.read(itr.next()));
         assertFalse(itr.hasNext());
     }
-    
+
     @Test
     public void testUndoIteratorStopsAtEnd() throws Exception {
-        journal.write(new byte[] {11}, false);
-        Location end = journal.write(new byte[] {12}, false);
-        journal.write(new byte[] {13}, false);
+        journal.write(new byte[]{11}, false);
+        Location end = journal.write(new byte[]{12}, false);
+        journal.write(new byte[]{13}, false);
         Iterator<Location> itr = journal.undo(end).iterator();
-        assertArrayEquals(new byte[] {13}, journal.read(itr.next()));
-        assertArrayEquals(new byte[] {12}, journal.read(itr.next()));
+        assertArrayEquals(new byte[]{13}, journal.read(itr.next()));
+        assertArrayEquals(new byte[]{12}, journal.read(itr.next()));
         assertFalse(itr.hasNext());
     }
-    
+
     @Test
     public void testCanDeleteThroughUndo() throws Exception {
-        journal.write(new byte[] {11}, false);
-        journal.write(new byte[] {12}, false);
-        journal.write(new byte[] {13}, false);
+        journal.write(new byte[]{11}, false);
+        journal.write(new byte[]{12}, false);
+        journal.write(new byte[]{13}, false);
         Iterator<Location> itr = journal.undo().iterator();
         itr.next();
         itr.remove();
         itr = journal.undo().iterator();
-        assertArrayEquals(new byte[] {12}, journal.read(itr.next()));
-        assertArrayEquals(new byte[] {11}, journal.read(itr.next()));
+        assertArrayEquals(new byte[]{12}, journal.read(itr.next()));
+        assertArrayEquals(new byte[]{11}, journal.read(itr.next()));
         assertFalse(itr.hasNext());
     }
-    
+
     @Test(expected = IllegalStateException.class)
     public void testThrowIllegalStateIfTheSameLocationIsRemovedThroughUndoMoreThanOnce() throws Exception {
-        journal.write(new byte[] {11}, false);
-        journal.write(new byte[] {12}, false);
+        journal.write(new byte[]{11}, false);
+        journal.write(new byte[]{12}, false);
         Iterator<Location> itr = journal.undo().iterator();
         itr.next();
         itr.remove();
         itr.remove();
     }
-    
+
     @Test(expected = IllegalStateException.class)
     public void testThrowIllegalStateIfCallingRemoveBeforeNext() throws Exception {
-        journal.write(new byte[] {11}, false);
+        journal.write(new byte[]{11}, false);
         Iterator<Location> itr = journal.undo().iterator();
         itr.remove();
     }
@@ -225,7 +225,7 @@ public class JournalTest {
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
     }
-    
+
     @Test
     public void testReplayFromLocation() throws Exception {
         int iterations = 10;
@@ -325,7 +325,6 @@ public class JournalTest {
                     writeLatch.countDown();
                 }
             }
-
         };
         journal.setListener(listener);
         for (int i = 0; i < iterations; i++) {
@@ -346,7 +345,6 @@ public class JournalTest {
                     writeLatch.countDown();
                 }
             }
-
         };
         journal.setReplicationTarget(replicator);
         for (int i = 0; i < iterations; i++) {
@@ -403,7 +401,6 @@ public class JournalTest {
                         ex.printStackTrace();
                     }
                 }
-
             });
         }
         executor.shutdown();
@@ -440,7 +437,6 @@ public class JournalTest {
                         ex.printStackTrace();
                     }
                 }
-
             });
         }
         executor.submit(new Runnable() {
@@ -452,7 +448,6 @@ public class JournalTest {
                     ex.printStackTrace();
                 }
             }
-
         });
         executor.shutdown();
         assertTrue(executor.awaitTermination(1, TimeUnit.MINUTES));
@@ -479,5 +474,4 @@ public class JournalTest {
             f.delete();
         }
     }
-
 }

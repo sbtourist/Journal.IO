@@ -1,36 +1,39 @@
 /**
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
  */
 package journal.io.api;
 
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.Iterator;
-import java.util.Map.Entry;
-import java.util.Set;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map.Entry;
+import java.util.NoSuchElementException;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.Adler32;
 import java.util.zip.Checksum;
@@ -38,11 +41,17 @@ import journal.io.util.IOHelper;
 import static journal.io.util.LogHelper.*;
 
 /**
- * Journal implementation based on append-only rotating logs and checksummed records, with concurrent writes and reads, 
- * dynamic batching and logs compaction.<br/>
- * Journal records can be written, read and deleted by providing a {@link Location} object.<br/>
- * The whole journal can be replayed by simply iterating through it in a foreach block.<br/>
- * 
+ * Journal implementation based on append-only rotating logs and checksummed
+ * records, with concurrent writes and reads, dynamic batching and logs
+ * compaction.
+ * <br/><br/> 
+ * Journal records can be written, read and deleted by
+ * providing a {@link Location} object.
+ * <br/><br/> 
+ * The whole Journal can be replayed forward or backward  
+ * by simply obtaining a redo or undo iterable and going through it in a for-each block.
+ * <br/>
+ *
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
  */
@@ -125,7 +134,6 @@ public class Journal {
             public boolean accept(File dir, String n) {
                 return dir.equals(directory) && n.startsWith(filePrefix) && n.endsWith(fileSuffix);
             }
-
         });
         if (files != null && files.length > 0) {
             for (int i = 0; i < files.length; i++) {
@@ -164,7 +172,8 @@ public class Journal {
     }
 
     /**
-     * Compact the journal, reducing size of logs containing deleted entries and completely removing completely empty (with only deleted entries) logs.
+     * Compact the journal, reducing size of logs containing deleted entries and
+     * completely removing completely empty (with only deleted entries) logs.
      *
      * @throws IOException
      */
@@ -198,8 +207,8 @@ public class Journal {
 
     /**
      * Sync asynchronously written records on disk.
-     * 
-     * @throws IOException 
+     *
+     * @throws IOException
      */
     public void sync() throws IOException {
         try {
@@ -210,7 +219,8 @@ public class Journal {
     }
 
     /**
-     * Read the record stored at the given {@link Location}, taking advantage of speculative disk reads.
+     * Read the record stored at the given {@link Location}, taking advantage of
+     * speculative disk reads.
      *
      * @param location
      * @return
@@ -222,8 +232,10 @@ public class Journal {
     }
 
     /**
-     * Read the record stored at the given {@link Location}, either by syncing with the disk state (if true) or by taking advantage
-     * of speculative disk reads (if false); the latter is faster, while the former is slower but will suddenly detect deleted records.
+     * Read the record stored at the given {@link Location}, either by syncing
+     * with the disk state (if true) or by taking advantage of speculative disk
+     * reads (if false); the latter is faster, while the former is slower but
+     * will suddenly detect deleted records.
      *
      * @param location
      * @param sync
@@ -236,8 +248,9 @@ public class Journal {
     }
 
     /**
-     * Write the given byte buffer record, either sync or async, and returns the stored {@link Location}.<br/>
-     * A sync write causes all previously batched async writes to be synced too.
+     * Write the given byte buffer record, either sync or async, and returns the
+     * stored {@link Location}.<br/> A sync write causes all previously batched
+     * async writes to be synced too.
      *
      * @param data
      * @param sync True if sync, false if async.
@@ -251,8 +264,10 @@ public class Journal {
     }
 
     /**
-     * Delete the record at the given {@link Location}.<br/>
-     * Deletes cause first a batch sync and always are logical: records will be actually deleted at log cleanup time.
+     * Delete the record at the given {@link Location}.<br/> Deletes cause first
+     * a batch sync and always are logical: records will be actually deleted at
+     * log cleanup time.
+     *
      * @param location
      * @throws IOException
      * @throws IllegalStateException
@@ -262,8 +277,11 @@ public class Journal {
     }
 
     /**
-     * Return an iterable to replay the journal by going through all records locations.
+     * Return an iterable to replay the journal by going through all records
+     * locations.
+     *
      * @return
+     * @throws IOException
      */
     public Iterable<Location> redo() throws IOException {
         Entry<Integer, DataFile> firstEntry = dataFiles.firstEntry();
@@ -274,39 +292,45 @@ public class Journal {
     }
 
     /**
-     * Return an iterable to replay the journal by going through all records locations starting from the given one.
+     * Return an iterable to replay the journal by going through all records
+     * locations starting from the given one.
+     *
      * @param start
      * @return
+     * @throws IOException
      */
     public Iterable<Location> redo(Location start) throws IOException {
         return new Redo(start);
     }
-    
+
     /**
      * Return an iterable to replay the journal in reverse, starting with the
      * newest location and ending with the first. The iterable does not include
      * future writes - writes that happen after its creation.
+     *
      * @return
      * @throws IOException
      */
     public Iterable<Location> undo() throws IOException {
-      return new Undo(redo());
+        return new Undo(redo());
     }
 
     /**
      * Return an iterable to replay the journal in reverse, starting with the
      * newest location and ending with the specified end location. The iterable
      * does not include future writes - writes that happen after its creation.
+     *
      * @param end
      * @return
      * @throws IOException
      */
     public Iterable<Location> undo(Location end) throws IOException {
-      return new Undo(redo(end));
+        return new Undo(redo(end));
     }
 
     /**
      * Get the files part of this journal.
+     *
      * @return
      */
     public Set<File> getFiles() {
@@ -319,6 +343,7 @@ public class Journal {
 
     /**
      * Get the max length of each log file.
+     *
      * @return
      */
     public int getMaxFileLength() {
@@ -334,6 +359,7 @@ public class Journal {
 
     /**
      * Get the journal directory containing log files.
+     *
      * @return
      */
     public File getDirectory() {
@@ -349,6 +375,7 @@ public class Journal {
 
     /**
      * Get the prefix for log files.
+     *
      * @return
      */
     public String getFilePrefix() {
@@ -357,6 +384,7 @@ public class Journal {
 
     /**
      * Set the prefix for log files.
+     *
      * @param filePrefix
      */
     public void setFilePrefix(String filePrefix) {
@@ -365,6 +393,7 @@ public class Journal {
 
     /**
      * Get the optional archive directory used to archive cleaned up log files.
+     *
      * @return
      */
     public File getDirectoryArchive() {
@@ -373,6 +402,7 @@ public class Journal {
 
     /**
      * Set the optional archive directory used to archive cleaned up log files.
+     *
      * @param directoryArchive
      */
     public void setDirectoryArchive(File directoryArchive) {
@@ -381,6 +411,7 @@ public class Journal {
 
     /**
      * Return true if cleaned up log files should be archived, false otherwise.
+     *
      * @return
      */
     public boolean isArchiveFiles() {
@@ -389,6 +420,7 @@ public class Journal {
 
     /**
      * Set true if cleaned up log files should be archived, false otherwise.
+     *
      * @param archiveFiles
      */
     public void setArchiveFiles(boolean archiveFiles) {
@@ -397,6 +429,7 @@ public class Journal {
 
     /**
      * Set the {@link ReplicationTarget} to replicate batch writes to.
+     *
      * @param replicationTarget
      */
     public void setReplicationTarget(ReplicationTarget replicationTarget) {
@@ -405,6 +438,7 @@ public class Journal {
 
     /**
      * Get the {@link ReplicationTarget} to replicate batch writes to.
+     *
      * @return
      */
     public ReplicationTarget getReplicationTarget() {
@@ -413,6 +447,7 @@ public class Journal {
 
     /**
      * Get the suffix for log files.
+     *
      * @return
      */
     public String getFileSuffix() {
@@ -421,6 +456,7 @@ public class Journal {
 
     /**
      * Set the suffix for log files.
+     *
      * @param fileSuffix
      */
     public void setFileSuffix(String fileSuffix) {
@@ -429,6 +465,7 @@ public class Journal {
 
     /**
      * Return true if records checksum is enabled, false otherwise.
+     *
      * @return
      */
     public boolean isChecksum() {
@@ -437,6 +474,7 @@ public class Journal {
 
     /**
      * Set true if records checksum is enabled, false otherwise.
+     *
      * @param checksumWrites
      */
     public void setChecksum(boolean checksumWrites) {
@@ -444,25 +482,31 @@ public class Journal {
     }
 
     /**
-     * Return true if every disk write is followed by a physical disk sync, synchronizing file descriptor properties and flushing hardware buffers,
+     * Return true if every disk write is followed by a physical disk sync,
+     * synchronizing file descriptor properties and flushing hardware buffers,
      * false otherwise.
-     * @return 
+     *
+     * @return
      */
     public boolean isPhysicalSync() {
         return physicalSync;
     }
 
     /**
-     * Set true if every disk write must be followed by a physical disk sync, synchronizing file descriptor properties and flushing hardware buffers,
+     * Set true if every disk write must be followed by a physical disk sync,
+     * synchronizing file descriptor properties and flushing hardware buffers,
      * false otherwise.
-     * @return 
+     *
+     * @return
      */
     public void setPhysicalSync(boolean physicalSync) {
         this.physicalSync = physicalSync;
     }
 
     /**
-     * Get the max size in bytes of the write batch: must always be equal or less than the max file length.
+     * Get the max size in bytes of the write batch: must always be equal or
+     * less than the max file length.
+     *
      * @return
      */
     public int getMaxWriteBatchSize() {
@@ -470,7 +514,9 @@ public class Journal {
     }
 
     /**
-     * Set the max size in bytes of the write batch: must always be equal or less than the max file length.
+     * Set the max size in bytes of the write batch: must always be equal or
+     * less than the max file length.
+     *
      * @param maxWriteBatchSize
      */
     public void setMaxWriteBatchSize(int maxWriteBatchSize) {
@@ -479,6 +525,7 @@ public class Journal {
 
     /**
      * Get the {@link JournalListener} to notify when syncing batches.
+     *
      * @return
      */
     public JournalListener getListener() {
@@ -487,6 +534,7 @@ public class Journal {
 
     /**
      * Set the {@link JournalListener} to notify when syncing batches.
+     *
      * @param listener
      */
     public void setListener(JournalListener listener) {
@@ -494,8 +542,10 @@ public class Journal {
     }
 
     /**
-     * Set the milliseconds interval for resources disposal: i.e., un-accessed files will be closed.
-     * @param disposeInterval 
+     * Set the milliseconds interval for resources disposal: i.e., un-accessed
+     * files will be closed.
+     *
+     * @param disposeInterval
      */
     public void setDisposeInterval(long disposeInterval) {
         this.disposeInterval = disposeInterval;
@@ -503,7 +553,8 @@ public class Journal {
 
     /**
      * Get the milliseconds interval for resources disposal.
-     * @return 
+     *
+     * @return
      */
     public long getDisposeInterval() {
         return disposeInterval;
@@ -676,124 +727,6 @@ public class Journal {
         return currentUserRecord;
     }
 
-    private class Redo implements Iterable<Location> {
-
-        private final Location start;
-
-        public Redo(Location start) {
-            this.start = start;
-        }
-
-        public Iterator<Location> iterator() {
-            return new Iterator<Location>() {
-
-                private Location next = start;
-
-                public boolean hasNext() {
-                    return next != null;
-                }
-
-                public Location next() {
-                    if (next != null) {
-                        try {
-                            Location current = next;
-                            next = goToNextLocation(current, Location.USER_RECORD_TYPE, true);
-                            return current;
-                        } catch (IOException ex) {
-                            throw new IllegalStateException(ex.getMessage(), ex);
-                        }
-                    } else {
-                        throw new NoSuchElementException("No next location!");
-                    }
-                }
-
-                public void remove() {
-                    if (next != null) {
-                        try {
-                            delete(next);
-                        } catch (IOException ex) {
-                            throw new IllegalStateException(ex.getMessage(), ex);
-                        }
-                    } else {
-                        throw new IllegalStateException("No location to remove!");
-                    }
-                }
-
-            };
-        }
-    }
-
-    private class Undo implements Iterable<Location> {
-        private final Object[] stack;
-        private final int start;
-  
-        public Undo(Iterable<Location> redo) {
-            // Object arrays of 12 are about the size of a cache-line (64 bytes)
-            // or two, depending on the oops-size.
-            Object[] stack = new Object[12];
-            // the last element of the arrays refer to the next "fat node."
-            // the last element of the last node is null as an end-mark
-            int pointer = 10;
-            Iterator<Location> itr = redo.iterator();
-            while (itr.hasNext()) {
-                Location location = itr.next();
-                stack[pointer] = location;
-                if (pointer == 0) {
-                    Object[] tmp = new Object[12];
-                    tmp[11] = stack;
-                    stack = tmp;
-                    pointer = 10;
-                } else {
-                    pointer--;
-                }
-            }
-            this.start = pointer + 1; // +1 to go back to last write
-            this.stack = stack;
-        }
-  
-        @Override
-        public Iterator<Location> iterator() {
-            return new Iterator<Location>() {
-                private int pointer = start;
-                private Object[] ref = stack;
-                private Location current;
-      
-                @Override
-                public boolean hasNext() {
-                    return ref[pointer] != null;
-                }
-      
-                @Override
-                public Location next() {
-                    Object next = ref[pointer];
-                    if (!(ref[pointer] instanceof Location)) {
-                        ref = (Object[]) ref[pointer];
-                        if (ref == null) {
-                          throw new NoSuchElementException();
-                        }
-                        pointer = 0;
-                        return next();
-                    }
-                    pointer++;
-                    return current = (Location) next;
-                }
-      
-                @Override
-                public void remove() {
-                    if (current == null) {
-                        throw new IllegalStateException("No location to remove!");
-                    }
-                    try {
-                        delete(current);
-                        current = null;
-                    } catch (IOException e) {
-                        throw new IllegalStateException(e.getMessage(), e);
-                    }
-                }
-            };
-        }
-    }
-
     static class WriteBatch {
 
         private static byte[] EMPTY_BUFFER = new byte[0];
@@ -927,7 +860,6 @@ public class Journal {
         int incrementAndGetPointer() {
             return ++pointer;
         }
-
     }
 
     static class WriteCommand implements JournalListener.Write {
@@ -953,7 +885,6 @@ public class Journal {
         boolean isSync() {
             return sync;
         }
-
     }
 
     static class WriteFuture implements Future<Boolean> {
@@ -985,6 +916,124 @@ public class Journal {
             boolean success = latch.await(timeout, unit);
             return success;
         }
+    }
+    
+    private class Redo implements Iterable<Location> {
 
+        private final Location start;
+
+        public Redo(Location start) {
+            this.start = start;
+        }
+
+        public Iterator<Location> iterator() {
+            return new Iterator<Location>() {
+
+                private Location next = start;
+
+                public boolean hasNext() {
+                    return next != null;
+                }
+
+                public Location next() {
+                    if (next != null) {
+                        try {
+                            Location current = next;
+                            next = goToNextLocation(current, Location.USER_RECORD_TYPE, true);
+                            return current;
+                        } catch (IOException ex) {
+                            throw new IllegalStateException(ex.getMessage(), ex);
+                        }
+                    } else {
+                        throw new NoSuchElementException();
+                    }
+                }
+
+                public void remove() {
+                    if (next != null) {
+                        try {
+                            delete(next);
+                        } catch (IOException ex) {
+                            throw new IllegalStateException(ex.getMessage(), ex);
+                        }
+                    } else {
+                        throw new IllegalStateException("No location to remove!");
+                    }
+                }
+            };
+        }
+    }
+
+    private class Undo implements Iterable<Location> {
+
+        private final Object[] stack;
+        private final int start;
+
+        public Undo(Iterable<Location> redo) {
+            // Object arrays of 12 are about the size of a cache-line (64 bytes)
+            // or two, depending on the oops-size.
+            Object[] stack = new Object[12];
+            // the last element of the arrays refer to the next "fat node."
+            // the last element of the last node is null as an end-mark
+            int pointer = 10;
+            Iterator<Location> itr = redo.iterator();
+            while (itr.hasNext()) {
+                Location location = itr.next();
+                stack[pointer] = location;
+                if (pointer == 0) {
+                    Object[] tmp = new Object[12];
+                    tmp[11] = stack;
+                    stack = tmp;
+                    pointer = 10;
+                } else {
+                    pointer--;
+                }
+            }
+            this.start = pointer + 1; // +1 to go back to last write
+            this.stack = stack;
+        }
+
+        @Override
+        public Iterator<Location> iterator() {
+            return new Iterator<Location>() {
+
+                private int pointer = start;
+                private Object[] ref = stack;
+                private Location current;
+
+                @Override
+                public boolean hasNext() {
+                    return ref[pointer] != null;
+                }
+
+                @Override
+                public Location next() {
+                    Object next = ref[pointer];
+                    if (!(ref[pointer] instanceof Location)) {
+                        ref = (Object[]) ref[pointer];
+                        if (ref == null) {
+                            throw new NoSuchElementException();
+                        }
+                        pointer = 0;
+                        return next();
+                    }
+                    pointer++;
+                    return current = (Location) next;
+                }
+
+                @Override
+                public void remove() {
+                    if (current == null) {
+                        throw new IllegalStateException("No location to remove!");
+                    }
+                    try {
+                        delete(current);
+                        current = null;
+                    } catch (IOException e) {
+                        throw new IllegalStateException(e.getMessage(), e);
+                    }
+                }
+            };
+        }
     }
 }
