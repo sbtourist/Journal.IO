@@ -67,7 +67,7 @@ public class JournalTest {
     }
 
     @Test
-    public void testSyncLogWritingAndReplaying() throws Exception {
+    public void testSyncLogWritingAndRedoing() throws Exception {
         int iterations = 10;
         for (int i = 0; i < iterations; i++) {
             journal.write(new String("DATA" + i).getBytes("UTF-8"), true);
@@ -80,7 +80,20 @@ public class JournalTest {
     }
 
     @Test
-    public void testAsyncLogWritingAndReplaying() throws Exception {
+    public void testSyncLogWritingAndUndoing() throws Exception {
+        int iterations = 10;
+        for (int i = 0; i < iterations; i++) {
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), true);
+        }
+        int i = 10;
+        for (Location location : journal.undo()) {
+            byte[] buffer = journal.read(location, false);
+            assertEquals("DATA" + --i, new String(buffer, "UTF-8"));
+        }
+    }
+
+    @Test
+    public void testAsyncLogWritingAndRedoing() throws Exception {
         int iterations = 10;
         for (int i = 0; i < iterations; i++) {
             journal.write(new String("DATA" + i).getBytes("UTF-8"), false);
@@ -93,127 +106,20 @@ public class JournalTest {
     }
 
     @Test
-    public void testRedoOnEmptyJournal() throws Exception {
-        Iterator<Location> itr = journal.redo().iterator();
-        assertFalse(itr.hasNext());
-        try {
-            itr.next();
-            fail("should have thrown");
-        } catch (Exception e) {
-            assertTrue(e instanceof NoSuchElementException);
+    public void testAsyncLogWritingAndUndoing() throws Exception {
+        int iterations = 10;
+        for (int i = 0; i < iterations; i++) {
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), false);
+        }
+        int i = 10;
+        for (Location location : journal.undo()) {
+            byte[] buffer = journal.read(location, false);
+            assertEquals("DATA" + --i, new String(buffer, "UTF-8"));
         }
     }
 
     @Test
-    public void testUndoMustTraverseLogInReverseOrder() throws Exception {
-        journal.write("DATA1".getBytes("UTF-8"), false);
-        journal.write("DATA2".getBytes("UTF-8"), false);
-        journal.write("DATA3".getBytes("UTF-8"), false);
-        Iterator<Location> itr = journal.undo().iterator();
-        assertTrue(itr.hasNext());
-        assertEquals("DATA3", new String(journal.read(itr.next(), false), "UTF-8"));
-        assertEquals("DATA2", new String(journal.read(itr.next(), false), "UTF-8"));
-        assertEquals("DATA1", new String(journal.read(itr.next(), false), "UTF-8"));
-        assertFalse(itr.hasNext());
-    }
-
-    @Test
-    public void testUndoDoesNotTakeNewWritesIntoAccount() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
-        journal.write("B".getBytes("UTF-8"), false);
-        Iterable<Location> undo = journal.undo();
-        journal.write("C".getBytes("UTF-8"), false);
-        Iterator<Location> locs = undo.iterator();
-        assertEquals("B", new String(journal.read(locs.next(), false), "UTF-8"));
-        assertEquals("A", new String(journal.read(locs.next(), false), "UTF-8"));
-        assertFalse(locs.hasNext());
-    }
-
-    @Test
-    public void testUndoingLargeChunksOfData() throws Exception {
-        byte parts = 127;
-        for (byte i = 0; i < parts; i++) {
-            journal.write(new byte[]{i}, false);
-        }
-        Iterator<Location> locs = journal.undo().iterator();
-        while (parts > 0) {
-            Location loc = locs.next();
-            assertArrayEquals(new byte[]{--parts}, journal.read(loc));
-        }
-    }
-
-    @Test(expected = NoSuchElementException.class)
-    public void testUndoingPastStartWillThrowException() throws Exception {
-        journal.write(new byte[]{1}, false);
-        Iterator<Location> itr = journal.undo().iterator();
-        itr.next();
-        itr.next();
-    }
-
-    @Test
-    public void testUndoingAnEmptyJournal() throws Exception {
-        Iterator<Location> itr = journal.undo().iterator();
-        assertFalse(itr.hasNext());
-        try {
-            itr.next();
-            fail("should have thrown");
-        } catch (Exception e) {
-            assertTrue(e instanceof NoSuchElementException);
-        }
-    }
-
-    @Test
-    public void testUndoingFromLastWriteIteratesOneLocation() throws Exception {
-        Location loc = journal.write(new byte[]{23}, false);
-        Iterator<Location> itr = journal.undo(loc).iterator();
-        assertArrayEquals(new byte[]{23}, journal.read(itr.next()));
-        assertFalse(itr.hasNext());
-    }
-
-    @Test
-    public void testUndoIteratorStopsAtEnd() throws Exception {
-        journal.write(new byte[]{11}, false);
-        Location end = journal.write(new byte[]{12}, false);
-        journal.write(new byte[]{13}, false);
-        Iterator<Location> itr = journal.undo(end).iterator();
-        assertArrayEquals(new byte[]{13}, journal.read(itr.next()));
-        assertArrayEquals(new byte[]{12}, journal.read(itr.next()));
-        assertFalse(itr.hasNext());
-    }
-
-    @Test
-    public void testCanDeleteThroughUndo() throws Exception {
-        journal.write(new byte[]{11}, false);
-        journal.write(new byte[]{12}, false);
-        journal.write(new byte[]{13}, false);
-        Iterator<Location> itr = journal.undo().iterator();
-        itr.next();
-        itr.remove();
-        itr = journal.undo().iterator();
-        assertArrayEquals(new byte[]{12}, journal.read(itr.next()));
-        assertArrayEquals(new byte[]{11}, journal.read(itr.next()));
-        assertFalse(itr.hasNext());
-    }
-
-    @Test(expected = IllegalStateException.class)
-    public void testThrowIllegalStateIfTheSameLocationIsRemovedThroughUndoMoreThanOnce() throws Exception {
-        journal.write(new byte[]{11}, false);
-        journal.write(new byte[]{12}, false);
-        Iterator<Location> itr = journal.undo().iterator();
-        itr.next();
-        itr.remove();
-        itr.remove();
-    }
-
-    @Test(expected = IllegalStateException.class)
-    public void testThrowIllegalStateIfCallingRemoveBeforeNext() throws Exception {
-        journal.write(new byte[]{11}, false);
-        Iterator<Location> itr = journal.undo().iterator();
-        itr.remove();
-    }
-
-    @Test
-    public void testMixedSyncAsyncLogWritingAndReplaying() throws Exception {
+    public void testMixedSyncAsyncLogWritingAndRedoing() throws Exception {
         int iterations = 10;
         for (int i = 0; i < iterations; i++) {
             boolean sync = i % 2 == 0 ? true : false;
@@ -227,19 +133,231 @@ public class JournalTest {
     }
 
     @Test
-    public void testReplayFromLocation() throws Exception {
+    public void testMixedSyncAsyncLogWritingAndUndoing() throws Exception {
         int iterations = 10;
-        Location latest = null;
         for (int i = 0; i < iterations; i++) {
-            latest = journal.write(new String("DATA" + i).getBytes("UTF-8"), true);
+            boolean sync = i % 2 == 0 ? true : false;
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
-        int i = 0;
-        for (Location location : journal.redo(latest)) {
+        int i = 10;
+        for (Location location : journal.undo()) {
             byte[] buffer = journal.read(location, false);
-            assertEquals("DATA9", new String(buffer, "UTF-8"));
-            i++;
+            assertEquals("DATA" + --i, new String(buffer, "UTF-8"));
         }
-        assertEquals(1, i);
+    }
+
+    @Test
+    public void testRedoForwardOrder() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("B".getBytes("UTF-8"), false);
+        journal.write("C".getBytes("UTF-8"), false);
+        Iterator<Location> redo = journal.redo().iterator();
+        assertTrue(redo.hasNext());
+        assertEquals("A", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertTrue(redo.hasNext());
+        assertEquals("B", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertTrue(redo.hasNext());
+        assertEquals("C", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertFalse(redo.hasNext());
+    }
+
+    @Test
+    public void testRedoForwardOrderWithStartingLocation() throws Exception {
+        Location a = journal.write("A".getBytes("UTF-8"), false);
+        Location b = journal.write("B".getBytes("UTF-8"), false);
+        Location c = journal.write("C".getBytes("UTF-8"), false);
+        Iterator<Location> redo = journal.redo(b).iterator();
+        assertTrue(redo.hasNext());
+        assertEquals("B", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertTrue(redo.hasNext());
+        assertEquals("C", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertFalse(redo.hasNext());
+    }
+
+    @Test
+    public void testRedoEmptyJournal() throws Exception {
+        int iterations = 0;
+        for (Location loc : journal.redo()) {
+            iterations++;
+        }
+        assertEquals(0, iterations);
+    }
+
+    @Test
+    public void testRedoLargeChunksOfData() throws Exception {
+        byte parts = 127;
+        for (byte i = 0; i < parts; i++) {
+            journal.write(new byte[]{i}, false);
+        }
+        parts = 0;
+        for (Location loc : journal.redo()) {
+            assertArrayEquals(new byte[]{parts++}, journal.read(loc));
+        }
+        assertEquals(127, parts);
+    }
+
+    @Test
+    public void testRedoTakesNewWritesIntoAccount() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("B".getBytes("UTF-8"), false);
+        Iterator<Location> redo = journal.redo().iterator();
+        journal.write("C".getBytes("UTF-8"), false);
+        assertEquals("A", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertEquals("B", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertEquals("C", new String(journal.read(redo.next(), false), "UTF-8"));
+    }
+
+    @Test
+    public void testRemoveThroughRedo() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("B".getBytes("UTF-8"), false);
+        journal.write("C".getBytes("UTF-8"), false);
+        Iterator<Location> itr = journal.redo().iterator();
+        int iterations = 0;
+        while (itr.hasNext()) {
+            itr.next();
+            itr.remove();
+            iterations++;
+        }
+        assertEquals(3, iterations);
+        iterations = 0;
+        for (Location loc : journal.redo()) {
+            iterations++;
+        }
+        assertEquals(0, iterations);
+    }
+    
+    @Test(expected = NoSuchElementException.class)
+    public void testNoSuchElementExceptionWithRedoIterator() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        Iterator<Location> itr = journal.redo().iterator();
+        assertTrue(itr.hasNext());
+        itr.next();
+        assertFalse(itr.hasNext());
+        itr.next();
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testIllegalStateExceptionIfTheSameLocationIsRemovedThroughRedoMoreThanOnce() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        Iterator<Location> itr = journal.redo().iterator();
+        itr.next();
+        itr.remove();
+        itr.remove();
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testIllegalStateExceptionIfCallingRemoveBeforeNextWithRedo() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        Iterator<Location> itr = journal.redo().iterator();
+        itr.remove();
+    }
+
+    @Test
+    public void testUndoBackwardOrder() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("B".getBytes("UTF-8"), false);
+        journal.write("C".getBytes("UTF-8"), false);
+        Iterator<Location> undo = journal.undo().iterator();
+        assertTrue(undo.hasNext());
+        assertEquals("C", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertTrue(undo.hasNext());
+        assertEquals("B", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertTrue(undo.hasNext());
+        assertEquals("A", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertFalse(undo.hasNext());
+    }
+
+    @Test
+    public void testUndoBackwardOrderWithEndingLocation() throws Exception {
+        Location a = journal.write("A".getBytes("UTF-8"), false);
+        Location b = journal.write("B".getBytes("UTF-8"), false);
+        Location c = journal.write("C".getBytes("UTF-8"), false);
+        Iterator<Location> undo = journal.undo(b).iterator();
+        assertTrue(undo.hasNext());
+        assertEquals("C", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertTrue(undo.hasNext());
+        assertEquals("B", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertFalse(undo.hasNext());
+    }
+
+    @Test
+    public void testUndoEmptyJournal() throws Exception {
+        int iterations = 0;
+        for (Location loc : journal.undo()) {
+            iterations++;
+        }
+        assertEquals(0, iterations);
+    }
+
+    @Test
+    public void testUndoLargeChunksOfData() throws Exception {
+        byte parts = 127;
+        for (byte i = 0; i < parts; i++) {
+            journal.write(new byte[]{i}, false);
+        }
+        parts = 127;
+        for (Location loc : journal.undo()) {
+            assertArrayEquals(new byte[]{--parts}, journal.read(loc));
+        }
+        assertEquals(0, parts);
+    }
+
+    @Test
+    public void testUndoDoesntTakeNewWritesIntoAccount() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("B".getBytes("UTF-8"), false);
+        Iterator<Location> undo = journal.undo().iterator();
+        journal.write("C".getBytes("UTF-8"), false);
+        assertEquals("B", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertEquals("A", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertFalse(undo.hasNext());
+    }
+
+    @Test
+    public void testRemoveThroughUndo() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("B".getBytes("UTF-8"), false);
+        journal.write("C".getBytes("UTF-8"), false);
+        Iterator<Location> itr = journal.undo().iterator();
+        int iterations = 0;
+        while (itr.hasNext()) {
+            itr.next();
+            itr.remove();
+            iterations++;
+        }
+        assertEquals(3, iterations);
+        iterations = 0;
+        for (Location loc : journal.undo()) {
+            iterations++;
+        }
+        assertEquals(0, iterations);
+    }
+    
+    @Test(expected = NoSuchElementException.class)
+    public void testNoSuchElementExceptionWithUndoIterator() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        Iterator<Location> itr = journal.undo().iterator();
+        assertTrue(itr.hasNext());
+        itr.next();
+        assertFalse(itr.hasNext());
+        itr.next();
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testIllegalStateExceptionIfTheSameLocationIsRemovedThroughUndoMoreThanOnce() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        Iterator<Location> itr = journal.undo().iterator();
+        itr.next();
+        itr.remove();
+        itr.remove();
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testIllegalStateExceptionIfCallingRemoveBeforeNextWithUndo() throws Exception {
+        journal.write("A".getBytes("UTF-8"), false);
+        Iterator<Location> itr = journal.undo().iterator();
+        itr.remove();
     }
 
     @Test

@@ -13,8 +13,8 @@
  */
 package journal.io.api;
 
-import org.junit.Before;
 import java.io.File;
+import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -45,11 +45,18 @@ public class ApiTest {
             journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
 
-        // Replay and read the journal:
+        // Replay the journal forward by redoing:
         int i = 0;
         for (Location location : journal.redo()) {
             byte[] record = journal.read(location);
             assertEquals("DATA" + i++, new String(record, "UTF-8"));
+        }
+        
+        // Replay the journal backward by undoing:
+        int j = 1000;
+        for (Location location : journal.undo()) {
+            byte[] record = journal.read(location);
+            assertEquals("DATA" + --i, new String(record, "UTF-8"));
         }
 
         // Close the journal:
