@@ -929,6 +929,7 @@ public class Journal {
         public Iterator<Location> iterator() {
             return new Iterator<Location>() {
 
+                private Location current = null;
                 private Location next = start;
 
                 public boolean hasNext() {
@@ -938,7 +939,7 @@ public class Journal {
                 public Location next() {
                     if (next != null) {
                         try {
-                            Location current = next;
+                            current = next;
                             next = goToNextLocation(current, Location.USER_RECORD_TYPE, true);
                             return current;
                         } catch (IOException ex) {
@@ -950,9 +951,10 @@ public class Journal {
                 }
 
                 public void remove() {
-                    if (next != null) {
+                    if (current != null) {
                         try {
-                            delete(next);
+                            delete(current);
+                            current = null;
                         } catch (IOException ex) {
                             throw new IllegalStateException(ex.getMessage(), ex);
                         }
