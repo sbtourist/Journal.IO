@@ -16,6 +16,7 @@ package journal.io.api;
 import journal.io.api.Journal.WriteBatch;
 import journal.io.api.Journal.WriteCommand;
 import journal.io.api.Journal.WriteFuture;
+
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.RandomAccessFile;
@@ -24,8 +25,10 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+
 import static journal.io.util.LogHelper.*;
 
 /**
@@ -41,6 +44,8 @@ class DataFileAppender {
     private final int SPIN_RETRIES = 100;
     private final int SPIN_BACKOFF = 10;
     //
+    private final ScheduledExecutorService executorService;
+    //
     private final BlockingQueue<WriteBatch> batchQueue = new LinkedBlockingQueue<WriteBatch>();
     private final AtomicReference<Exception> firstAsyncException = new AtomicReference<Exception>();
     private final CountDownLatch shutdownDone = new CountDownLatch(1);
@@ -51,12 +56,13 @@ class DataFileAppender {
     private volatile WriteBatch nextWriteBatch;
     private volatile DataFile lastAppendDataFile;
     private volatile RandomAccessFile lastAppendRaf;
-    private volatile Thread writer;
+    //    private volatile Thread writer;
     private volatile boolean running;
     private volatile boolean shutdown;
 
-    DataFileAppender(Journal journal) {
+    DataFileAppender(Journal journal, ScheduledExecutorService executorService) {
         this.journal = journal;
+        this.executorService = executorService;
     }
 
     Location storeItem(byte[] data, byte type, boolean sync) throws IOException {
@@ -195,8 +201,8 @@ class DataFileAppender {
     void open() {
         if (!running) {
             running = true;
-            writer = new Thread() {
-
+            executorService.submit(new Runnable() {
+                @Override
                 public void run() {
                     try {
                         processBatches();
@@ -209,12 +215,7 @@ class DataFileAppender {
                         }
                     }
                 }
-
-            };
-            writer.setPriority(Thread.MAX_PRIORITY);
-            writer.setDaemon(true);
-            writer.setName("DataFileAppender Writer Thread");
-            writer.start();
+            });
         }
     }
 

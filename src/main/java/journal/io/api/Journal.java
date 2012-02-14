@@ -13,6 +13,8 @@
  */
 package journal.io.api;
 
+import journal.io.util.IOHelper;
+
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -31,24 +33,27 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.Adler32;
 import java.util.zip.Checksum;
-import journal.io.util.IOHelper;
-import static journal.io.util.LogHelper.*;
+
+import static journal.io.util.LogHelper.error;
+import static journal.io.util.LogHelper.warn;
 
 /**
  * Journal implementation based on append-only rotating logs and checksummed
  * records, with concurrent writes and reads, dynamic batching and logs
  * compaction.
- * <br/><br/> 
+ * <br/><br/>
  * Journal records can be written, read and deleted by
  * providing a {@link Location} object.
- * <br/><br/> 
- * The whole Journal can be replayed forward or backward  
+ * <br/><br/>
+ * The whole Journal can be replayed forward or backward
  * by simply obtaining a redo or undo iterable and going through it in a for-each block.
  * <br/>
  *
@@ -77,6 +82,8 @@ public class Journal {
     static final int MIN_FILE_LENGTH = 1024;
     static final int DEFAULT_MAX_BATCH_SIZE = DEFAULT_MAX_FILE_LENGTH;
     //
+    private final ScheduledExecutorService executorService;
+    //
     private final ConcurrentNavigableMap<Integer, DataFile> dataFiles = new ConcurrentSkipListMap<Integer, DataFile>();
     private final ConcurrentNavigableMap<Location, WriteCommand> inflightWrites = new ConcurrentSkipListMap<Location, WriteCommand>();
     private final AtomicLong totalLength = new AtomicLong();
@@ -104,6 +111,14 @@ public class Journal {
     //
     private ReplicationTarget replicationTarget;
 
+    public Journal() {
+        executorService = Executors.newSingleThreadScheduledExecutor();
+    }
+
+    public Journal(ScheduledExecutorService executorService) {
+        this.executorService = executorService;
+    }
+
     /**
      * Open the journal, eventually recovering it if already existent.
      *
@@ -123,10 +138,10 @@ public class Journal {
 
         opened = true;
 
-        accessor = new DataFileAccessor(this);
+        accessor = new DataFileAccessor(this, executorService);
         accessor.open();
 
-        appender = new DataFileAppender(this);
+        appender = new DataFileAppender(this, executorService);
         appender.open();
 
         File[] files = directory.listFiles(new FilenameFilter() {
@@ -917,7 +932,7 @@ public class Journal {
             return success;
         }
     }
-    
+
     private class Redo implements Iterable<Location> {
 
         private final Location start;
