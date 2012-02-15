@@ -1,20 +1,17 @@
 /**
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
  */
 package journal.io.api;
-
-import journal.io.api.Journal.WriteCommand;
-import journal.io.util.IOHelper;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -30,18 +27,19 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-
-import static journal.io.util.LogHelper.warn;
+import journal.io.api.Journal.WriteCommand;
+import journal.io.util.IOHelper;
+import static journal.io.util.LogHelper.*;
 
 /**
- * File reader/updater to randomly access data files, supporting concurrent thread-isolated reads and writes.
+ * File reader/updater to randomly access data files, supporting concurrent
+ * thread-isolated reads and writes.
  *
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
  */
 class DataFileAccessor {
 
-    private final ScheduledExecutorService executorService;
     private final ConcurrentMap<Thread, ConcurrentMap<Integer, RandomAccessFile>> perThreadDataFileRafs = new ConcurrentHashMap<Thread, ConcurrentMap<Integer, RandomAccessFile>>();
     private final ConcurrentMap<Thread, ConcurrentMap<Integer, Lock>> perThreadDataFileLocks = new ConcurrentHashMap<Thread, ConcurrentMap<Integer, Lock>>();
     private final ReadWriteLock compactionLock = new ReentrantReadWriteLock();
@@ -50,11 +48,12 @@ class DataFileAccessor {
     //
     private final Journal journal;
     //
+    private final ScheduledExecutorService resourceDisposer;
     private ScheduledFuture resourceDisposerFuture;
 
-    public DataFileAccessor(Journal journal, ScheduledExecutorService executorService) {
+    public DataFileAccessor(Journal journal, ScheduledExecutorService resourceDisposer) {
         this.journal = journal;
-        this.executorService = executorService;
+        this.resourceDisposer = resourceDisposer;
     }
 
     void updateLocation(Location location, byte type, boolean sync) throws IOException {
@@ -206,7 +205,7 @@ class DataFileAccessor {
     }
 
     void open() {
-        resourceDisposerFuture = executorService.scheduleAtFixedRate(new ResourceDisposer(), journal.getDisposeInterval(), journal.getDisposeInterval(), TimeUnit.MILLISECONDS);
+        resourceDisposerFuture = resourceDisposer.scheduleAtFixedRate(new ResourceDisposer(), journal.getDisposeInterval(), journal.getDisposeInterval(), TimeUnit.MILLISECONDS);
     }
 
     void close() {
@@ -342,6 +341,5 @@ class DataFileAccessor {
                 perThreadDataFileLocks.remove(deadThread);
             }
         }
-
     }
 }

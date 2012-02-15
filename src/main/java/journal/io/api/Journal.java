@@ -49,14 +49,10 @@ import static journal.io.util.LogHelper.warn;
 /**
  * Journal implementation based on append-only rotating logs and checksummed
  * records, with concurrent writes and reads, dynamic batching and logs
- * compaction.
- * <br/><br/>
- * Journal records can be written, read and deleted by
- * providing a {@link Location} object.
- * <br/><br/>
- * The whole Journal can be replayed forward or backward
- * by simply obtaining a redo or undo iterable and going through it in a for-each block.
- * <br/>
+ * compaction. <br/><br/> Journal records can be written, read and deleted by
+ * providing a {@link Location} object. <br/><br/> The whole Journal can be
+ * replayed forward or backward by simply obtaining a redo or undo iterable and
+ * going through it in a for-each block. <br/>
  *
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
@@ -83,7 +79,8 @@ public class Journal {
     static final int MIN_FILE_LENGTH = 1024;
     static final int DEFAULT_MAX_BATCH_SIZE = DEFAULT_MAX_FILE_LENGTH;
     //
-    private final ScheduledExecutorService executorService;
+    private final ScheduledExecutorService resourceDisposer;
+    private final boolean resourceDisposerOwner;
     //
     private final ConcurrentNavigableMap<Integer, DataFile> dataFiles = new ConcurrentSkipListMap<Integer, DataFile>();
     private final ConcurrentNavigableMap<Location, WriteCommand> inflightWrites = new ConcurrentSkipListMap<Location, WriteCommand>();
@@ -105,6 +102,7 @@ public class Journal {
     private DataFileAccessor accessor;
     //
     private boolean opened;
+    private boolean closed;
     //
     private boolean archiveFiles;
     //
@@ -112,23 +110,34 @@ public class Journal {
     //
     private ReplicationTarget replicationTarget;
 
+    /**
+     * Create a new Journal.
+     */
     public Journal() {
-        executorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+        this.resourceDisposer = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+
             @Override
             public Thread newThread(Runnable runnable) {
                 Thread thread = new Thread(runnable);
                 thread.setDaemon(true);
-                thread.setName("Journal IO - " + runnable.getClass().getSimpleName());
+                thread.setName("Journal.IO - Resource Disposer");
                 return thread;
             }
         });
+        this.resourceDisposerOwner = true;
     }
 
-    public Journal(ScheduledExecutorService executorService) {
-        if (executorService == null) {
-            throw new IllegalArgumentException("The executorService must be not null.");
+    /**
+     * Create a new Journal with a specified, externally managed, scheduled
+     * executor service as resource disposer: only for advanced users who want
+     * to minimize threads usage.
+     */
+    public Journal(ScheduledExecutorService resourceDisposer) {
+        if (resourceDisposer == null) {
+            throw new IllegalArgumentException("The resource disposer executor must be not null.");
         }
-        this.executorService = executorService;
+        this.resourceDisposer = resourceDisposer;
+        this.resourceDisposerOwner = false;
     }
 
     /**
@@ -140,6 +149,9 @@ public class Journal {
         if (opened) {
             return;
         }
+        if (closed) {
+            throw new IllegalStateException("Cannot reopen a closed Journal!");
+        }
 
         if (maxFileLength < MIN_FILE_LENGTH) {
             throw new IllegalStateException("Max file length must be equal or greater than: " + MIN_FILE_LENGTH);
@@ -150,10 +162,10 @@ public class Journal {
 
         opened = true;
 
-        accessor = new DataFileAccessor(this, executorService);
+        accessor = new DataFileAccessor(this, resourceDisposer);
         accessor.open();
 
-        appender = new DataFileAppender(this, executorService);
+        appender = new DataFileAppender(this);
         appender.open();
 
         File[] files = directory.listFiles(new FilenameFilter() {
@@ -188,8 +200,11 @@ public class Journal {
      * @throws IOException
      */
     public synchronized void close() throws IOException {
-        if (!opened) {
+        if (!opened || closed) {
             return;
+        }
+        if (resourceDisposerOwner) {
+            resourceDisposer.shutdownNow();
         }
         accessor.close();
         appender.close();
