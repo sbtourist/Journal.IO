@@ -56,7 +56,6 @@ class DataFileAppender {
     private volatile WriteBatch nextWriteBatch;
     private volatile DataFile lastAppendDataFile;
     private volatile RandomAccessFile lastAppendRaf;
-    //    private volatile Thread writer;
     private volatile boolean running;
     private volatile boolean shutdown;
 
