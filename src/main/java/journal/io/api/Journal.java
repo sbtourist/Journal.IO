@@ -116,6 +116,9 @@ public class Journal {
     }
 
     public Journal(ScheduledExecutorService executorService) {
+        if (executorService == null) {
+            throw new IllegalArgumentException("The executorService must be not null.");
+        }
         this.executorService = executorService;
     }
 
