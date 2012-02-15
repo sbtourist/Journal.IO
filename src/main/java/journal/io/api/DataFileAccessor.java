@@ -13,7 +13,9 @@
  */
 package journal.io.api;
 
-import java.util.concurrent.locks.ReentrantLock;
+import journal.io.api.Journal.WriteCommand;
+import journal.io.util.IOHelper;
+
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.HashSet;
@@ -21,25 +23,25 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import journal.io.api.Journal.WriteCommand;
-import journal.io.util.IOHelper;
-import static journal.io.util.LogHelper.*;
+
+import static journal.io.util.LogHelper.warn;
 
 /**
  * File reader/updater to randomly access data files, supporting concurrent thread-isolated reads and writes.
- * 
+ *
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
  */
 class DataFileAccessor {
 
-    private final ScheduledExecutorService disposer = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService executorService;
     private final ConcurrentMap<Thread, ConcurrentMap<Integer, RandomAccessFile>> perThreadDataFileRafs = new ConcurrentHashMap<Thread, ConcurrentMap<Integer, RandomAccessFile>>();
     private final ConcurrentMap<Thread, ConcurrentMap<Integer, Lock>> perThreadDataFileLocks = new ConcurrentHashMap<Thread, ConcurrentMap<Integer, Lock>>();
     private final ReadWriteLock compactionLock = new ReentrantReadWriteLock();
@@ -47,9 +49,12 @@ class DataFileAccessor {
     private final Lock compactorMutex = compactionLock.writeLock();
     //
     private final Journal journal;
+    //
+    private ScheduledFuture resourceDisposerFuture;
 
-    public DataFileAccessor(Journal journal) {
+    public DataFileAccessor(Journal journal, ScheduledExecutorService executorService) {
         this.journal = journal;
+        this.executorService = executorService;
     }
 
     void updateLocation(Location location, byte type, boolean sync) throws IOException {
@@ -201,11 +206,11 @@ class DataFileAccessor {
     }
 
     void open() {
-        disposer.scheduleAtFixedRate(new ResourceDisposer(), journal.getDisposeInterval(), journal.getDisposeInterval(), TimeUnit.MILLISECONDS);
+        resourceDisposerFuture = executorService.scheduleAtFixedRate(new ResourceDisposer(), journal.getDisposeInterval(), journal.getDisposeInterval(), TimeUnit.MILLISECONDS);
     }
 
     void close() {
-        disposer.shutdown();
+        resourceDisposerFuture.cancel(false);
     }
 
     void pause() {

@@ -13,6 +13,10 @@
  */
 package journal.io.api;
 
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
@@ -20,12 +24,15 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import static org.junit.Assert.*;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
@@ -226,7 +233,7 @@ public class JournalTest {
         }
         assertEquals(0, iterations);
     }
-    
+
     @Test(expected = NoSuchElementException.class)
     public void testNoSuchElementExceptionWithRedoIterator() throws Exception {
         journal.write("A".getBytes("UTF-8"), false);
@@ -333,7 +340,7 @@ public class JournalTest {
         }
         assertEquals(0, iterations);
     }
-    
+
     @Test(expected = NoSuchElementException.class)
     public void testNoSuchElementExceptionWithUndoIterator() throws Exception {
         journal.write("A".getBytes("UTF-8"), false);
@@ -490,6 +497,15 @@ public class JournalTest {
         for (int i = 0; i < iterations; i++) {
             journal.write(data, true);
             assertTrue(journal.getInflightWrites().isEmpty());
+        }
+    }
+
+    @Test
+    public void testManyJournalOpenedAtSameTime() throws Exception {
+        ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+        for (int i = 0; i < 5000; i++) {
+            Journal _journal = new Journal(executorService);
+            _journal.open();
         }
     }
 
