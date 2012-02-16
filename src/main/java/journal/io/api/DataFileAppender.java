@@ -1,15 +1,15 @@
 /**
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
  */
 package journal.io.api;
 
@@ -29,7 +29,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import static journal.io.util.LogHelper.*;
 
 /**
- * File writer to do batch appends to a data file, based on a non-blocking, mostly lock-free, algorithm to maximize throughput on concurrent writes.
+ * File writer to do batch appends to a data file, based on a non-blocking,
+ * mostly lock-free, algorithm to maximize throughput on concurrent writes.
  *
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
@@ -42,7 +43,7 @@ class DataFileAppender {
     private final int SPIN_BACKOFF = 10;
     //
     private final BlockingQueue<WriteBatch> batchQueue = new LinkedBlockingQueue<WriteBatch>();
-    private final AtomicReference<Exception> firstAsyncException = new AtomicReference<Exception>();
+    private final AtomicReference<Exception> asyncException = new AtomicReference<Exception>();
     private final CountDownLatch shutdownDone = new CountDownLatch(1);
     private final AtomicBoolean batching = new AtomicBoolean(false);
     //
@@ -59,12 +60,13 @@ class DataFileAppender {
         this.journal = journal;
     }
 
-    Location storeItem(byte[] data, byte type, boolean sync) throws IOException {
+    Location storeItem(byte[] data, byte type, boolean sync, WriteCallback callback) throws IOException {
         int size = Journal.HEADER_SIZE + data.length;
 
         Location location = new Location();
         location.setSize(size);
         location.setType(type);
+        location.setWriteCallback(callback);
         WriteCommand write = new WriteCommand(location, data, sync);
         location = enqueueBatch(write);
 
@@ -120,10 +122,10 @@ class DataFileAppender {
         int limit = SPIN_RETRIES;
         while (true) {
             if (shutdown) {
-                throw new IOException("DataFileAppender Writer Thread Shutdown!");
+                throw new IOException("Writer Thread Shutdown!");
             }
-            if (firstAsyncException.get() != null) {
-                throw new IOException(firstAsyncException.get());
+            if (asyncException.get() != null) {
+                throw new IOException(asyncException.get());
             }
             try {
                 if (!shutdown && batching.compareAndSet(false, true)) {
@@ -209,7 +211,6 @@ class DataFileAppender {
                         }
                     }
                 }
-
             };
             writer.setPriority(Thread.MAX_PRIORITY);
             writer.setDaemon(true);
@@ -244,17 +245,13 @@ class DataFileAppender {
     }
 
     /**
-     * The async processing loop that writes to the data files and does the
-     * force calls. Since the file sync() call is the slowest of all the
-     * operations, this algorithm tries to 'batch' or group together several
-     * file sync() requests into a single file sync() call. The batching is
-     * accomplished attaching the same CountDownLatch instance to every force
-     * request in a group.
+     * The async processing loop that does the batch writes.
      */
     private void processBatches() {
+        WriteBatch wb = null;
         try {
             while (!shutdown || !batchQueue.isEmpty()) {
-                WriteBatch wb = batchQueue.take();
+                wb = batchQueue.take();
 
                 if (!wb.isEmpty()) {
                     boolean newOrRotated = lastAppendDataFile != wb.getDataFile();
@@ -266,26 +263,41 @@ class DataFileAppender {
                         lastAppendRaf = lastAppendDataFile.openRandomAccessFile();
                     }
 
-                    // perform batch:
-                    wb.perform(lastAppendRaf, journal.getListener(), journal.getReplicationTarget(), journal.isChecksum(), journal.isPhysicalSync());
+                    // Perform batch:
+                    wb.perform(lastAppendRaf, journal.isChecksum(), journal.isPhysicalSync(), journal.getReplicationTarget());
 
                     // Adjust journal length:
                     journal.addToTotalLength(wb.getSize());
 
-                    // Now that the data is on disk, remove the writes from the in-flight cache.
-                    Collection<WriteCommand> commands = wb.getWrites();
-                    for (WriteCommand current : commands) {
-                        if (!current.isSync()) {
-                            journal.getInflightWrites().remove(current.getLocation());
+                    // Now that the data is on disk, notify callbacks and remove the writes from the in-flight cache:
+                    for (WriteCommand current : wb.getWrites()) {
+                        try {
+                            current.getLocation().getWriteCallback().onSync(current.getLocation());
+                        } catch (Throwable ex) {
+                            warn(ex, ex.getMessage());
                         }
+                        journal.getInflightWrites().remove(current.getLocation());
                     }
 
-                    // Signal any waiting threads that the write is on disk.
+                    // Finally signal any waiting threads that the write is on disk.
                     wb.getLatch().countDown();
                 }
             }
-        } catch (Exception e) {
-            firstAsyncException.compareAndSet(null, e);
+        } catch (Exception ex) {
+            // Put back latest batch:
+            batchQueue.offer(wb);
+            // Notify error to all locations of all batches:
+            for (WriteBatch currentBatch : batchQueue) {
+                for (WriteCommand currentWrite : currentBatch.getWrites()) {
+                    try {
+                        currentWrite.getLocation().getWriteCallback().onError(currentWrite.getLocation(), ex);
+                    } catch (Throwable innerEx) {
+                        warn(innerEx, innerEx.getMessage());
+                    }
+                }
+            }
+            // Propagate exception:
+            asyncException.compareAndSet(null, ex);
         } finally {
             try {
                 if (lastAppendRaf != null) {
@@ -296,5 +308,4 @@ class DataFileAppender {
             shutdownDone.countDown();
         }
     }
-
 }

@@ -43,14 +43,10 @@ import static journal.io.util.LogHelper.*;
 /**
  * Journal implementation based on append-only rotating logs and checksummed
  * records, with concurrent writes and reads, dynamic batching and logs
- * compaction.
- * <br/><br/> 
- * Journal records can be written, read and deleted by
- * providing a {@link Location} object.
- * <br/><br/> 
- * The whole Journal can be replayed forward or backward  
- * by simply obtaining a redo or undo iterable and going through it in a for-each block.
- * <br/>
+ * compaction. <br/><br/> Journal records can be written, read and deleted by
+ * providing a {@link Location} object. <br/><br/> The whole Journal can be
+ * replayed forward or backward by simply obtaining a redo or undo iterable and
+ * going through it in a for-each block. <br/>
  *
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
@@ -99,8 +95,6 @@ public class Journal {
     private boolean opened;
     //
     private boolean archiveFiles;
-    //
-    private JournalListener listener;
     //
     private ReplicationTarget replicationTarget;
 
@@ -259,7 +253,25 @@ public class Journal {
      * @throws IllegalStateException
      */
     public Location write(byte[] data, boolean sync) throws IOException, IllegalStateException {
-        Location loc = appender.storeItem(data, Location.USER_RECORD_TYPE, sync);
+        Location loc = appender.storeItem(data, Location.USER_RECORD_TYPE, sync, Location.NoWriteCallback.INSTANCE);
+        return loc;
+    }
+    
+    /**
+     * Write the given byte buffer record, either sync or async, and returns the
+     * stored {@link Location}.<br/> A sync write causes all previously batched
+     * async writes to be synced too.<br/> The provided callback will be invoked if sync
+     * is completed or if some error occurs during syncing.
+     *
+     * @param data
+     * @param sync True if sync, false if async.
+     * @param callback 
+     * @return
+     * @throws IOException
+     * @throws IllegalStateException
+     */
+    public Location write(byte[] data, boolean sync, WriteCallback callback) throws IOException, IllegalStateException {
+        Location loc = appender.storeItem(data, Location.USER_RECORD_TYPE, sync, callback);
         return loc;
     }
 
@@ -524,24 +536,6 @@ public class Journal {
     }
 
     /**
-     * Get the {@link JournalListener} to notify when syncing batches.
-     *
-     * @return
-     */
-    public JournalListener getListener() {
-        return listener;
-    }
-
-    /**
-     * Set the {@link JournalListener} to notify when syncing batches.
-     *
-     * @param listener
-     */
-    public void setListener(JournalListener listener) {
-        this.listener = listener;
-    }
-
-    /**
      * Set the milliseconds interval for resources disposal: i.e., un-accessed
      * files will be closed.
      *
@@ -681,7 +675,7 @@ public class Journal {
                 batch.appendBatch(write);
                 currentUserLocation = goToNextLocation(currentUserLocation, Location.USER_RECORD_TYPE, false);
             }
-            batch.perform(raf, null, null, true, true);
+            batch.perform(raf, true, true, null);
         } finally {
             if (raf != null) {
                 raf.close();
@@ -779,7 +773,7 @@ public class Journal {
             writes.offer(writeRecord);
         }
 
-        void perform(RandomAccessFile file, JournalListener listener, ReplicationTarget replicator, boolean checksum, boolean physicalSync) throws IOException {
+        void perform(RandomAccessFile file, boolean checksum, boolean physicalSync, ReplicationTarget replicationTarget) throws IOException {
             ByteBuffer buffer = ByteBuffer.allocate(size);
             WriteCommand control = writes.peek();
 
@@ -817,20 +811,15 @@ public class Journal {
             file.seek(offset);
             file.write(buffer.array(), 0, size);
 
+            // Then sync:
             if (physicalSync) {
                 IOHelper.sync(file.getFD());
             }
 
+            // And replicate:
             try {
-                if (listener != null) {
-                    listener.synced(writes.toArray(new WriteCommand[writes.size()]));
-                }
-            } catch (Throwable ex) {
-                warn("Cannot notify listeners!", ex);
-            }
-            try {
-                if (replicator != null) {
-                    replicator.replicate(control.location, buffer.array());
+                if (replicationTarget != null) {
+                    replicationTarget.replicate(control.location, buffer.array());
                 }
             } catch (Throwable ex) {
                 warn("Cannot replicate!", ex);
@@ -862,7 +851,7 @@ public class Journal {
         }
     }
 
-    static class WriteCommand implements JournalListener.Write {
+    static class WriteCommand {
 
         private final Location location;
         private final boolean sync;
@@ -917,7 +906,7 @@ public class Journal {
             return success;
         }
     }
-    
+
     private class Redo implements Iterable<Location> {
 
         private final Location start;

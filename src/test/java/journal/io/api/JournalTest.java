@@ -226,7 +226,7 @@ public class JournalTest {
         }
         assertEquals(0, iterations);
     }
-    
+
     @Test(expected = NoSuchElementException.class)
     public void testNoSuchElementExceptionWithRedoIterator() throws Exception {
         journal.write("A".getBytes("UTF-8"), false);
@@ -333,7 +333,7 @@ public class JournalTest {
         }
         assertEquals(0, iterations);
     }
-    
+
     @Test(expected = NoSuchElementException.class)
     public void testNoSuchElementExceptionWithUndoIterator() throws Exception {
         journal.write("A".getBytes("UTF-8"), false);
@@ -433,24 +433,51 @@ public class JournalTest {
     }
 
     @Test
-    public void testSyncAndCallListener() throws Exception {
+    public void testWriteCallbackOnSync() throws Exception {
         final int iterations = 10;
         final CountDownLatch writeLatch = new CountDownLatch(iterations);
-        JournalListener listener = new JournalListener() {
+        WriteCallback callback = new WriteCallback() {
 
-            public void synced(Write[] writes) {
-                for (int i = 0; i < writes.length; i++) {
-                    writeLatch.countDown();
-                }
+            @Override
+            public void onSync(Location syncedLocation) {
+                writeLatch.countDown();
+            }
+
+            @Override
+            public void onError(Location location, Throwable error) {
             }
         };
-        journal.setListener(listener);
         for (int i = 0; i < iterations; i++) {
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), false);
+            journal.write(new byte[]{(byte) i}, false, callback);
         }
         journal.sync();
         assertTrue(writeLatch.await(5, TimeUnit.SECONDS));
     }
+
+    /*@Test
+    public void testWriteCallbackOnError() throws Exception {
+        final int iterations = 10;
+        final CountDownLatch writeLatch = new CountDownLatch(iterations);
+        WriteCallback callback = new WriteCallback() {
+
+            @Override
+            public void onSync(Location syncedLocation) {
+            }
+
+            @Override
+            public void onError(Location location, Throwable error) {
+                System.out.println("BUH!");
+                writeLatch.countDown();
+            }
+        };
+        for (int i = 0; i < iterations; i++) {
+            journal.write(new byte[]{(byte) i}, false, callback);
+        }
+        deleteFilesInDirectory(dir);
+        dir.delete();
+        journal.sync();
+        assertTrue(writeLatch.await(5, TimeUnit.SECONDS));
+    }*/
 
     @Test
     public void testSyncAndCallReplicator() throws Exception {
