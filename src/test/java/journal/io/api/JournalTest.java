@@ -454,7 +454,7 @@ public class JournalTest {
         assertTrue(writeLatch.await(5, TimeUnit.SECONDS));
     }
 
-    /*@Test
+    @Test
     public void testWriteCallbackOnError() throws Exception {
         final int iterations = 10;
         final CountDownLatch writeLatch = new CountDownLatch(iterations);
@@ -466,7 +466,6 @@ public class JournalTest {
 
             @Override
             public void onError(Location location, Throwable error) {
-                System.out.println("BUH!");
                 writeLatch.countDown();
             }
         };
@@ -475,9 +474,12 @@ public class JournalTest {
         }
         deleteFilesInDirectory(dir);
         dir.delete();
-        journal.sync();
+        try {
+            journal.sync();
+        } catch (Exception ex) {
+        }
         assertTrue(writeLatch.await(5, TimeUnit.SECONDS));
-    }*/
+    }
 
     @Test
     public void testSyncAndCallReplicator() throws Exception {
@@ -611,12 +613,14 @@ public class JournalTest {
 
     private void deleteFilesInDirectory(File directory) {
         File[] files = directory.listFiles();
-        for (int i = 0; i < files.length; i++) {
-            File f = files[i];
-            if (f.isDirectory()) {
-                deleteFilesInDirectory(f);
+        if (files != null) {
+            for (int i = 0; i < files.length; i++) {
+                File f = files[i];
+                if (f.isDirectory()) {
+                    deleteFilesInDirectory(f);
+                }
+                f.delete();
             }
-            f.delete();
         }
     }
 }

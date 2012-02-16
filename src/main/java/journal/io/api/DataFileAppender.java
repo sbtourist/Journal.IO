@@ -19,7 +19,6 @@ import journal.io.api.Journal.WriteFuture;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.RandomAccessFile;
-import java.util.Collection;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
@@ -85,6 +84,12 @@ class DataFileAppender {
         int spinnings = 0;
         int limit = SPIN_RETRIES;
         while (true) {
+            if (shutdown) {
+                throw new IOException("Writer Thread Shutdown!");
+            }
+            if (asyncException.get() != null) {
+                throw new IOException(asyncException.get());
+            }
             try {
                 if (batching.compareAndSet(false, true)) {
                     try {
@@ -244,6 +249,10 @@ class DataFileAppender {
         }
     }
 
+    public Exception getAsyncException() {
+        return asyncException.get();
+    }
+
     /**
      * The async processing loop that does the batch writes.
      */
@@ -286,7 +295,7 @@ class DataFileAppender {
         } catch (Exception ex) {
             // Put back latest batch:
             batchQueue.offer(wb);
-            // Notify error to all locations of all batches:
+            // Notify error to all locations of all batches, and signal waiting threads:
             for (WriteBatch currentBatch : batchQueue) {
                 for (WriteCommand currentWrite : currentBatch.getWrites()) {
                     try {
@@ -295,6 +304,7 @@ class DataFileAppender {
                         warn(innerEx, innerEx.getMessage());
                     }
                 }
+                currentBatch.getLatch().countDown();
             }
             // Propagate exception:
             asyncException.compareAndSet(null, ex);

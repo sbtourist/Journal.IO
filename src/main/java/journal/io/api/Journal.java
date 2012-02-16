@@ -207,6 +207,9 @@ public class Journal {
     public void sync() throws IOException {
         try {
             appender.sync().get();
+            if (appender.getAsyncException() != null) {
+                throw new IOException(appender.getAsyncException());
+            }
         } catch (Exception ex) {
             throw new IllegalStateException(ex.getMessage(), ex);
         }
@@ -256,16 +259,16 @@ public class Journal {
         Location loc = appender.storeItem(data, Location.USER_RECORD_TYPE, sync, Location.NoWriteCallback.INSTANCE);
         return loc;
     }
-    
+
     /**
      * Write the given byte buffer record, either sync or async, and returns the
      * stored {@link Location}.<br/> A sync write causes all previously batched
-     * async writes to be synced too.<br/> The provided callback will be invoked if sync
-     * is completed or if some error occurs during syncing.
+     * async writes to be synced too.<br/> The provided callback will be invoked
+     * if sync is completed or if some error occurs during syncing.
      *
      * @param data
      * @param sync True if sync, false if async.
-     * @param callback 
+     * @param callback
      * @return
      * @throws IOException
      * @throws IllegalStateException
