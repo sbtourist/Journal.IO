@@ -116,11 +116,11 @@ public final class Location implements Comparable<Location> {
         this.latch = latch;
     }
 
-    public void setWriteCallback(WriteCallback writeCallback) {
+    void setWriteCallback(WriteCallback writeCallback) {
         this.writeCallback = writeCallback;
     }
 
-    public WriteCallback getWriteCallback() {
+    WriteCallback getWriteCallback() {
         return writeCallback;
     }
 
@@ -167,7 +167,7 @@ public final class Location implements Comparable<Location> {
         return dataFileId ^ pointer;
     }
 
-    public static class NoWriteCallback implements WriteCallback {
+    static class NoWriteCallback implements WriteCallback {
 
         public static final WriteCallback INSTANCE = new NoWriteCallback();
 
