@@ -361,7 +361,7 @@ public class JournalTest {
     }
 
     @Test
-    public void testLogRecovery() throws Exception {
+    public void testLogRecoveryWithFollowingWrites() throws Exception {
         int iterations = 10;
         //
         for (int i = 0; i < iterations; i++) {
@@ -384,6 +384,38 @@ public class JournalTest {
             assertEquals("DATA" + index++, new String(buffer, "UTF-8"));
         }
         assertEquals(iterations * 2, index);
+    }
+    
+    @Test
+    public void testLogRecoveryWithDeletes() throws Exception {
+        int iterations = 10;
+        //
+        for (int i = 0; i < iterations; i++) {
+            boolean sync = i % 2 == 0 ? true : false;
+            Location written = journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
+            journal.delete(written);
+        }
+        //
+        journal.close();
+        //
+        journal.open();
+    }
+    
+    @Test
+    public void testLogRecoveryWithDeletesAndCompact() throws Exception {
+        int iterations = 10;
+        //
+        for (int i = 0; i < iterations; i++) {
+            boolean sync = i % 2 == 0 ? true : false;
+            Location written = journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
+            journal.delete(written);
+        }
+        //
+        journal.compact();
+        //
+        journal.close();
+        //
+        journal.open();
     }
 
     @Test

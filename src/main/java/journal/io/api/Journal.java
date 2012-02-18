@@ -43,14 +43,10 @@ import static journal.io.util.LogHelper.*;
 /**
  * Journal implementation based on append-only rotating logs and checksummed
  * records, with concurrent writes and reads, dynamic batching and logs
- * compaction.
- * <br/><br/> 
- * Journal records can be written, read and deleted by
- * providing a {@link Location} object.
- * <br/><br/> 
- * The whole Journal can be replayed forward or backward  
- * by simply obtaining a redo or undo iterable and going through it in a for-each block.
- * <br/>
+ * compaction. <br/><br/> Journal records can be written, read and deleted by
+ * providing a {@link Location} object. <br/><br/> The whole Journal can be
+ * replayed forward or backward by simply obtaining a redo or undo iterable and
+ * going through it in a for-each block. <br/>
  *
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
@@ -695,27 +691,33 @@ public class Journal {
     }
 
     private Location recoveryCheck() throws IOException {
-        Location currentUserBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
+        Location currentBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
+        Location nextBatch = null;
         while (true) {
-            ByteBuffer buffer = ByteBuffer.wrap(accessor.readLocation(currentUserBatch, false));
             if (isChecksum()) {
-                long expectedChecksum = buffer.getLong();
-                byte data[] = new byte[buffer.remaining()];
-                Checksum checksum = new Adler32();
-                buffer.get(data);
-                checksum.update(data, 0, data.length);
-                if (expectedChecksum != checksum.getValue()) {
-                    throw new IOException("Bad checksum for location: " + currentUserBatch);
+                ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
+                long expectedChecksum = currentBatchBuffer.getLong();
+                Checksum actualChecksum = new Adler32();
+                Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, true);
+                while (nextLocation != null && nextLocation.getType() != Location.BATCH_CONTROL_RECORD_TYPE) {
+                    byte data[] = accessor.readLocation(nextLocation, false);
+                    actualChecksum.update(data, 0, data.length);
+                    nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, true);
                 }
+                if (expectedChecksum != actualChecksum.getValue()) {
+                    throw new IOException("Bad checksum for location: " + currentBatch);
+                }
+                nextBatch = nextLocation;
+            } else {
+                nextBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
             }
-            Location next = goToNextLocation(currentUserBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
-            if (next != null) {
-                currentUserBatch = next;
+            if (nextBatch != null) {
+                currentBatch = nextBatch;
             } else {
                 break;
             }
         }
-        Location currentUserRecord = currentUserBatch;
+        Location currentUserRecord = currentBatch;
         while (true) {
             Location next = goToNextLocation(currentUserRecord, Location.USER_RECORD_TYPE, false);
             if (next != null) {
@@ -781,6 +783,7 @@ public class Journal {
 
         void perform(RandomAccessFile file, JournalListener listener, ReplicationTarget replicator, boolean checksum, boolean physicalSync) throws IOException {
             ByteBuffer buffer = ByteBuffer.allocate(size);
+            Checksum adler32 = new Adler32();
             WriteCommand control = writes.peek();
 
             // Write an empty batch control record.
@@ -800,16 +803,15 @@ public class Journal {
                 buffer.putInt(current.location.getSize());
                 buffer.put(current.location.getType());
                 buffer.put(current.getData());
+                if (checksum) {
+                    adler32.update(current.getData(), 0, current.getData().length);
+                }
             }
 
             // Now we can fill in the batch control record properly.
             buffer.position(Journal.HEADER_SIZE);
             buffer.putInt(size - Journal.BATCH_CONTROL_RECORD_SIZE);
             if (checksum) {
-                Checksum adler32 = new Adler32();
-                adler32.update(buffer.array(),
-                        Journal.BATCH_CONTROL_RECORD_SIZE,
-                        size - Journal.BATCH_CONTROL_RECORD_SIZE);
                 buffer.putLong(adler32.getValue());
             }
 
@@ -917,7 +919,7 @@ public class Journal {
             return success;
         }
     }
-    
+
     private class Redo implements Iterable<Location> {
 
         private final Location start;

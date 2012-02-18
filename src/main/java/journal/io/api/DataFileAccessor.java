@@ -157,13 +157,13 @@ class DataFileAccessor {
                         next.setPointer(raf.readInt());
                         next.setSize(raf.readInt());
                         next.setType(raf.readByte());
-                        if (next.getType() != type) {
+                        if (type != Location.ANY_RECORD_TYPE && next.getType() != type) {
                             raf.skipBytes(next.getSize() - Journal.HEADER_SIZE);
                         } else {
                             break;
                         }
                     } while (raf.length() - raf.getFilePointer() > Journal.HEADER_SIZE);
-                    if (next.getType() == type) {
+                    if (type == Location.ANY_RECORD_TYPE || next.getType() == type) {
                         next.setData(readLocationData(next, raf));
                         raf.seek(position);
                         return next;

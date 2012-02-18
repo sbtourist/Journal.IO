@@ -26,7 +26,7 @@ import java.util.concurrent.CountDownLatch;
  */
 public final class Location implements Comparable<Location> {
 
-    static final byte NO_RECORD_TYPE = 0;
+    static final byte ANY_RECORD_TYPE = 0;
     static final byte USER_RECORD_TYPE = 1;
     static final byte BATCH_CONTROL_RECORD_TYPE = 2;
     static final byte DELETED_RECORD_TYPE = 3;
@@ -36,7 +36,7 @@ public final class Location implements Comparable<Location> {
     private volatile int dataFileId = NOT_SET;
     private volatile int pointer = NOT_SET;
     private volatile int size = NOT_SET;
-    private volatile byte type = NO_RECORD_TYPE;
+    private volatile byte type = ANY_RECORD_TYPE;
     private volatile byte[] data;
     private CountDownLatch latch;
 
