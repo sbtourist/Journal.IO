@@ -41,21 +41,21 @@ public class ApiTest {
         // Write to the journal:
         int iterations = 1000;
         for (int i = 0; i < iterations; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
+            Journal.Sync sync = i % 2 == 0 ? Journal.Sync.TRUE : Journal.Sync.FALSE;
             journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
 
         // Replay the journal forward by redoing:
         int i = 0;
         for (Location location : journal.redo()) {
-            byte[] record = journal.read(location);
+            byte[] record = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + i++, new String(record, "UTF-8"));
         }
         
         // Replay the journal backward by undoing:
         int j = 1000;
         for (Location location : journal.undo()) {
-            byte[] record = journal.read(location);
+            byte[] record = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + --i, new String(record, "UTF-8"));
         }
 

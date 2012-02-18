@@ -60,21 +60,21 @@ public class JournalTest {
 
     @Test(expected = IOException.class)
     public void testAsyncSpeculativeReadWorksButSyncReadRaisesException() throws Exception {
-        Location data = journal.write(new String("DATA").getBytes("UTF-8"), true);
+        Location data = journal.write(new String("DATA").getBytes("UTF-8"), Journal.Sync.TRUE);
         journal.delete(data);
-        assertEquals("DATA", journal.read(data, false));
-        journal.read(data, true);
+        assertEquals("DATA", journal.read(data, Journal.Sync.FALSE));
+        journal.read(data, Journal.Sync.TRUE);
     }
 
     @Test
     public void testSyncLogWritingAndRedoing() throws Exception {
         int iterations = 10;
         for (int i = 0; i < iterations; i++) {
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), true);
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.Sync.TRUE);
         }
         int i = 0;
         for (Location location : journal.redo()) {
-            byte[] buffer = journal.read(location, false);
+            byte[] buffer = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
     }
@@ -83,11 +83,11 @@ public class JournalTest {
     public void testSyncLogWritingAndUndoing() throws Exception {
         int iterations = 10;
         for (int i = 0; i < iterations; i++) {
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), true);
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.Sync.TRUE);
         }
         int i = 10;
         for (Location location : journal.undo()) {
-            byte[] buffer = journal.read(location, false);
+            byte[] buffer = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + --i, new String(buffer, "UTF-8"));
         }
     }
@@ -96,11 +96,11 @@ public class JournalTest {
     public void testAsyncLogWritingAndRedoing() throws Exception {
         int iterations = 10;
         for (int i = 0; i < iterations; i++) {
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), false);
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.Sync.FALSE);
         }
         int i = 0;
         for (Location location : journal.redo()) {
-            byte[] buffer = journal.read(location, false);
+            byte[] buffer = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
     }
@@ -109,11 +109,11 @@ public class JournalTest {
     public void testAsyncLogWritingAndUndoing() throws Exception {
         int iterations = 10;
         for (int i = 0; i < iterations; i++) {
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), false);
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.Sync.FALSE);
         }
         int i = 10;
         for (Location location : journal.undo()) {
-            byte[] buffer = journal.read(location, false);
+            byte[] buffer = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + --i, new String(buffer, "UTF-8"));
         }
     }
@@ -122,12 +122,12 @@ public class JournalTest {
     public void testMixedSyncAsyncLogWritingAndRedoing() throws Exception {
         int iterations = 10;
         for (int i = 0; i < iterations; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
+            Journal.Sync sync = i % 2 == 0 ? Journal.Sync.TRUE : Journal.Sync.FALSE;
             journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
         int i = 0;
         for (Location location : journal.redo()) {
-            byte[] buffer = journal.read(location, false);
+            byte[] buffer = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
     }
@@ -136,41 +136,41 @@ public class JournalTest {
     public void testMixedSyncAsyncLogWritingAndUndoing() throws Exception {
         int iterations = 10;
         for (int i = 0; i < iterations; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
+            Journal.Sync sync = i % 2 == 0 ? Journal.Sync.TRUE : Journal.Sync.FALSE;
             journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
         int i = 10;
         for (Location location : journal.undo()) {
-            byte[] buffer = journal.read(location, false);
+            byte[] buffer = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + --i, new String(buffer, "UTF-8"));
         }
     }
 
     @Test
     public void testRedoForwardOrder() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
-        journal.write("B".getBytes("UTF-8"), false);
-        journal.write("C".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
+        journal.write("B".getBytes("UTF-8"), Journal.Sync.FALSE);
+        journal.write("C".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> redo = journal.redo().iterator();
         assertTrue(redo.hasNext());
-        assertEquals("A", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertEquals("A", new String(journal.read(redo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertTrue(redo.hasNext());
-        assertEquals("B", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertEquals("B", new String(journal.read(redo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertTrue(redo.hasNext());
-        assertEquals("C", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertEquals("C", new String(journal.read(redo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertFalse(redo.hasNext());
     }
 
     @Test
     public void testRedoForwardOrderWithStartingLocation() throws Exception {
-        Location a = journal.write("A".getBytes("UTF-8"), false);
-        Location b = journal.write("B".getBytes("UTF-8"), false);
-        Location c = journal.write("C".getBytes("UTF-8"), false);
+        Location a = journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
+        Location b = journal.write("B".getBytes("UTF-8"), Journal.Sync.FALSE);
+        Location c = journal.write("C".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> redo = journal.redo(b).iterator();
         assertTrue(redo.hasNext());
-        assertEquals("B", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertEquals("B", new String(journal.read(redo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertTrue(redo.hasNext());
-        assertEquals("C", new String(journal.read(redo.next(), false), "UTF-8"));
+        assertEquals("C", new String(journal.read(redo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertFalse(redo.hasNext());
     }
 
@@ -187,31 +187,31 @@ public class JournalTest {
     public void testRedoLargeChunksOfData() throws Exception {
         byte parts = 127;
         for (byte i = 0; i < parts; i++) {
-            journal.write(new byte[]{i}, false);
+            journal.write(new byte[]{i}, Journal.Sync.FALSE);
         }
         parts = 0;
         for (Location loc : journal.redo()) {
-            assertArrayEquals(new byte[]{parts++}, journal.read(loc));
+            assertArrayEquals(new byte[]{parts++}, journal.read(loc, Journal.Sync.FALSE));
         }
         assertEquals(127, parts);
     }
 
     @Test
     public void testRedoTakesNewWritesIntoAccount() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
-        journal.write("B".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
+        journal.write("B".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> redo = journal.redo().iterator();
-        journal.write("C".getBytes("UTF-8"), false);
-        assertEquals("A", new String(journal.read(redo.next(), false), "UTF-8"));
-        assertEquals("B", new String(journal.read(redo.next(), false), "UTF-8"));
-        assertEquals("C", new String(journal.read(redo.next(), false), "UTF-8"));
+        journal.write("C".getBytes("UTF-8"), Journal.Sync.FALSE);
+        assertEquals("A", new String(journal.read(redo.next(), Journal.Sync.FALSE), "UTF-8"));
+        assertEquals("B", new String(journal.read(redo.next(), Journal.Sync.FALSE), "UTF-8"));
+        assertEquals("C", new String(journal.read(redo.next(), Journal.Sync.FALSE), "UTF-8"));
     }
 
     @Test
     public void testRemoveThroughRedo() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
-        journal.write("B".getBytes("UTF-8"), false);
-        journal.write("C".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
+        journal.write("B".getBytes("UTF-8"), Journal.Sync.FALSE);
+        journal.write("C".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> itr = journal.redo().iterator();
         int iterations = 0;
         while (itr.hasNext()) {
@@ -229,7 +229,7 @@ public class JournalTest {
 
     @Test(expected = NoSuchElementException.class)
     public void testNoSuchElementExceptionWithRedoIterator() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> itr = journal.redo().iterator();
         assertTrue(itr.hasNext());
         itr.next();
@@ -239,7 +239,7 @@ public class JournalTest {
 
     @Test(expected = IllegalStateException.class)
     public void testIllegalStateExceptionIfTheSameLocationIsRemovedThroughRedoMoreThanOnce() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> itr = journal.redo().iterator();
         itr.next();
         itr.remove();
@@ -248,36 +248,36 @@ public class JournalTest {
 
     @Test(expected = IllegalStateException.class)
     public void testIllegalStateExceptionIfCallingRemoveBeforeNextWithRedo() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> itr = journal.redo().iterator();
         itr.remove();
     }
 
     @Test
     public void testUndoBackwardOrder() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
-        journal.write("B".getBytes("UTF-8"), false);
-        journal.write("C".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
+        journal.write("B".getBytes("UTF-8"), Journal.Sync.FALSE);
+        journal.write("C".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> undo = journal.undo().iterator();
         assertTrue(undo.hasNext());
-        assertEquals("C", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertEquals("C", new String(journal.read(undo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertTrue(undo.hasNext());
-        assertEquals("B", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertEquals("B", new String(journal.read(undo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertTrue(undo.hasNext());
-        assertEquals("A", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertEquals("A", new String(journal.read(undo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertFalse(undo.hasNext());
     }
 
     @Test
     public void testUndoBackwardOrderWithEndingLocation() throws Exception {
-        Location a = journal.write("A".getBytes("UTF-8"), false);
-        Location b = journal.write("B".getBytes("UTF-8"), false);
-        Location c = journal.write("C".getBytes("UTF-8"), false);
+        Location a = journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
+        Location b = journal.write("B".getBytes("UTF-8"), Journal.Sync.FALSE);
+        Location c = journal.write("C".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> undo = journal.undo(b).iterator();
         assertTrue(undo.hasNext());
-        assertEquals("C", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertEquals("C", new String(journal.read(undo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertTrue(undo.hasNext());
-        assertEquals("B", new String(journal.read(undo.next(), false), "UTF-8"));
+        assertEquals("B", new String(journal.read(undo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertFalse(undo.hasNext());
     }
 
@@ -294,31 +294,31 @@ public class JournalTest {
     public void testUndoLargeChunksOfData() throws Exception {
         byte parts = 127;
         for (byte i = 0; i < parts; i++) {
-            journal.write(new byte[]{i}, false);
+            journal.write(new byte[]{i}, Journal.Sync.FALSE);
         }
         parts = 127;
         for (Location loc : journal.undo()) {
-            assertArrayEquals(new byte[]{--parts}, journal.read(loc));
+            assertArrayEquals(new byte[]{--parts}, journal.read(loc, Journal.Sync.FALSE));
         }
         assertEquals(0, parts);
     }
 
     @Test
     public void testUndoDoesntTakeNewWritesIntoAccount() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
-        journal.write("B".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
+        journal.write("B".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> undo = journal.undo().iterator();
-        journal.write("C".getBytes("UTF-8"), false);
-        assertEquals("B", new String(journal.read(undo.next(), false), "UTF-8"));
-        assertEquals("A", new String(journal.read(undo.next(), false), "UTF-8"));
+        journal.write("C".getBytes("UTF-8"), Journal.Sync.FALSE);
+        assertEquals("B", new String(journal.read(undo.next(), Journal.Sync.FALSE), "UTF-8"));
+        assertEquals("A", new String(journal.read(undo.next(), Journal.Sync.FALSE), "UTF-8"));
         assertFalse(undo.hasNext());
     }
 
     @Test
     public void testRemoveThroughUndo() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
-        journal.write("B".getBytes("UTF-8"), false);
-        journal.write("C".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
+        journal.write("B".getBytes("UTF-8"), Journal.Sync.FALSE);
+        journal.write("C".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> itr = journal.undo().iterator();
         int iterations = 0;
         while (itr.hasNext()) {
@@ -336,7 +336,7 @@ public class JournalTest {
 
     @Test(expected = NoSuchElementException.class)
     public void testNoSuchElementExceptionWithUndoIterator() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> itr = journal.undo().iterator();
         assertTrue(itr.hasNext());
         itr.next();
@@ -346,7 +346,7 @@ public class JournalTest {
 
     @Test(expected = IllegalStateException.class)
     public void testIllegalStateExceptionIfTheSameLocationIsRemovedThroughUndoMoreThanOnce() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> itr = journal.undo().iterator();
         itr.next();
         itr.remove();
@@ -355,7 +355,7 @@ public class JournalTest {
 
     @Test(expected = IllegalStateException.class)
     public void testIllegalStateExceptionIfCallingRemoveBeforeNextWithUndo() throws Exception {
-        journal.write("A".getBytes("UTF-8"), false);
+        journal.write("A".getBytes("UTF-8"), Journal.Sync.FALSE);
         Iterator<Location> itr = journal.undo().iterator();
         itr.remove();
     }
@@ -365,7 +365,7 @@ public class JournalTest {
         int iterations = 10;
         //
         for (int i = 0; i < iterations; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
+            Journal.Sync sync = i % 2 == 0 ? Journal.Sync.TRUE : Journal.Sync.FALSE;
             journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
         //
@@ -374,13 +374,13 @@ public class JournalTest {
         journal.open();
         //
         for (int i = iterations; i < iterations * 2; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
+            Journal.Sync sync = i % 2 == 0 ? Journal.Sync.TRUE : Journal.Sync.FALSE;
             journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
         //
         int index = 0;
         for (Location location : journal.redo()) {
-            byte[] buffer = journal.read(location, false);
+            byte[] buffer = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + index++, new String(buffer, "UTF-8"));
         }
         assertEquals(iterations * 2, index);
@@ -390,12 +390,12 @@ public class JournalTest {
     public void testLogSpanningMultipleFiles() throws Exception {
         int iterations = 1000;
         for (int i = 0; i < iterations; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
+            Journal.Sync sync = i % 2 == 0 ? Journal.Sync.TRUE : Journal.Sync.FALSE;
             journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
         int i = 0;
         for (Location location : journal.redo()) {
-            byte[] buffer = journal.read(location, false);
+            byte[] buffer = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
     }
@@ -404,12 +404,12 @@ public class JournalTest {
     public void testLogCompaction() throws Exception {
         int iterations = 1000;
         for (int i = 0; i < iterations / 2; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
+            Journal.Sync sync = i % 2 == 0 ? Journal.Sync.TRUE : Journal.Sync.FALSE;
             Location toDelete = journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
             journal.delete(toDelete);
         }
         for (int i = iterations / 2; i < iterations; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
+            Journal.Sync sync = i % 2 == 0 ? Journal.Sync.TRUE : Journal.Sync.FALSE;
             journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
         }
         //
@@ -419,16 +419,16 @@ public class JournalTest {
         //
         int i = iterations / 2;
         for (Location location : journal.redo()) {
-            byte[] buffer = journal.read(location, false);
+            byte[] buffer = journal.read(location, Journal.Sync.FALSE);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
     }
 
     @Test(expected = IOException.class)
     public void testCannotReadDeletedLocation() throws Exception {
-        Location location = journal.write("DATA".getBytes("UTF-8"), false);
+        Location location = journal.write("DATA".getBytes("UTF-8"), Journal.Sync.FALSE);
         journal.delete(location);
-        journal.read(location, false);
+        journal.read(location, Journal.Sync.FALSE);
         fail("Should have raised IOException!");
     }
 
@@ -448,7 +448,7 @@ public class JournalTest {
             }
         };
         for (int i = 0; i < iterations; i++) {
-            journal.write(new byte[]{(byte) i}, false, callback);
+            journal.write(new byte[]{(byte) i}, Journal.Sync.FALSE, callback);
         }
         journal.sync();
         assertTrue(writeLatch.await(5, TimeUnit.SECONDS));
@@ -470,7 +470,7 @@ public class JournalTest {
             }
         };
         for (int i = 0; i < iterations; i++) {
-            journal.write(new byte[]{(byte) i}, false, callback);
+            journal.write(new byte[]{(byte) i}, Journal.Sync.FALSE, callback);
         }
         deleteFilesInDirectory(dir);
         dir.delete();
@@ -495,7 +495,7 @@ public class JournalTest {
         };
         journal.setReplicationTarget(replicator);
         for (int i = 0; i < iterations; i++) {
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), false);
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.Sync.FALSE);
         }
         journal.sync();
         assertTrue(writeLatch.await(5, TimeUnit.SECONDS));
@@ -506,7 +506,7 @@ public class JournalTest {
         byte[] data = "DATA".getBytes();
         final int iterations = 10;
         for (int i = 0; i < iterations; i++) {
-            journal.write(data, false);
+            journal.write(data, Journal.Sync.FALSE);
         }
         journal.close();
         assertTrue(journal.getInflightWrites().isEmpty());
@@ -517,7 +517,7 @@ public class JournalTest {
         byte[] data = "DATA".getBytes();
         final int iterations = 10;
         for (int i = 0; i < iterations; i++) {
-            journal.write(data, true);
+            journal.write(data, Journal.Sync.TRUE);
             assertTrue(journal.getInflightWrites().isEmpty());
         }
     }
@@ -534,10 +534,10 @@ public class JournalTest {
 
                 public void run() {
                     try {
-                        boolean sync = index % 2 == 0 ? true : false;
+                        Journal.Sync sync = index % 2 == 0 ? Journal.Sync.TRUE : Journal.Sync.FALSE;
                         String write = new String("DATA" + index);
                         Location location = journal.write(write.getBytes("UTF-8"), sync);
-                        String read = new String(journal.read(location, false), "UTF-8");
+                        String read = new String(journal.read(location, Journal.Sync.FALSE), "UTF-8");
                         if (read.equals("DATA" + index)) {
                             counter.incrementAndGet();
                         } else {
@@ -567,10 +567,10 @@ public class JournalTest {
 
                 public void run() {
                     try {
-                        boolean sync = index % 2 == 0 ? true : false;
+                        Journal.Sync sync = index % 2 == 0 ? Journal.Sync.TRUE : Journal.Sync.FALSE;
                         String write = new String("DATA" + index);
                         Location location = journal.write(write.getBytes("UTF-8"), sync);
-                        String read = new String(journal.read(location, false), "UTF-8");
+                        String read = new String(journal.read(location, Journal.Sync.FALSE), "UTF-8");
                         if (read.equals("DATA" + index)) {
                             if (index % 4 == 0) {
                                 journal.delete(location);
