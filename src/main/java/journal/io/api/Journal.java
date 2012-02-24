@@ -217,8 +217,10 @@ public class Journal {
 
     /**
      * Read the record stored at the given {@link Location}, either by syncing
-     * with the disk state (if {@code SyncRead.TRUE}) or by taking advantage of speculative disk
-     * reads (if {@code SyncRead.FALSE}); the latter is faster, while the former is slower but
+     * with the disk state (if {@code ReadType.SYNC}) or by taking advantage of
+     * speculative disk
+     * reads (if {@code ReadType.ASYNC}); the latter is faster, while the former
+     * is slower but
      * will suddenly detect deleted records.
      *
      * @param location
@@ -227,12 +229,13 @@ public class Journal {
      * @throws IOException
      * @throws IllegalStateException
      */
-    public byte[] read(Location location, Sync read) throws IOException, IllegalStateException {
-        return accessor.readLocation(location, read.isSync());
+    public byte[] read(Location location, ReadType read) throws IOException, IllegalStateException {
+        return accessor.readLocation(location, read.equals(ReadType.SYNC) ? true : false);
     }
 
     /**
-     * Write the given byte buffer record, either sync (if {@code Sync.TRUE}) or async (if {@code Sync.FALSE}), and returns the
+     * Write the given byte buffer record, either sync (if {@code WriteType.SYNC})
+     * or async (if {@code WriteType.ASYNC}), and returns the
      * stored {@link Location}.<br/> A sync write causes all previously batched
      * async writes to be synced too.
      *
@@ -242,13 +245,13 @@ public class Journal {
      * @throws IOException
      * @throws IllegalStateException
      */
-    public Location write(byte[] data, Sync write) throws IOException, IllegalStateException {
-        Location loc = appender.storeItem(data, Location.USER_RECORD_TYPE, write.isSync(), Location.NoWriteCallback.INSTANCE);
-        return loc;
+    public Location write(byte[] data, WriteType write) throws IOException, IllegalStateException {
+        return write(data, write, Location.NoWriteCallback.INSTANCE);
     }
 
     /**
-     * Write the given byte buffer record, either sync (if {@code Sync.TRUE}) or async (if {@code Sync.FALSE}), and returns the
+     * Write the given byte buffer record, either sync (if {@code WriteType.SYNC})
+     * or async (if {@code WriteType.ASYNC}), and returns the
      * stored {@link Location}.<br/> A sync write causes all previously batched
      * async writes to be synced too.<br/> The provided callback will be invoked
      * if sync is completed or if some error occurs during syncing.
@@ -260,8 +263,8 @@ public class Journal {
      * @throws IOException
      * @throws IllegalStateException
      */
-    public Location write(byte[] data, Sync write, WriteCallback callback) throws IOException, IllegalStateException {
-        Location loc = appender.storeItem(data, Location.USER_RECORD_TYPE, write.isSync(), callback);
+    public Location write(byte[] data, WriteType write, WriteCallback callback) throws IOException, IllegalStateException {
+        Location loc = appender.storeItem(data, Location.USER_RECORD_TYPE, write.equals(WriteType.SYNC) ? true : false, callback);
         return loc;
     }
 
@@ -710,20 +713,15 @@ public class Journal {
         }
         return currentUserRecord;
     }
-    
-    public static enum Sync {
-        
-        TRUE(true), FALSE(false);
-        
-        private boolean sync;
 
-        private Sync(boolean sync) {
-            this.sync = sync;
-        }
+    public static enum ReadType {
 
-        public boolean isSync() {
-            return sync;
-        }
+        SYNC, ASYNC;
+    }
+
+    public static enum WriteType {
+
+        SYNC, ASYNC;
     }
 
     static class WriteBatch {
