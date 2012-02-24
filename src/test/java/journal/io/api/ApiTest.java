@@ -1,15 +1,15 @@
 /**
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package journal.io.api;
 
@@ -41,21 +41,21 @@ public class ApiTest {
         // Write to the journal:
         int iterations = 1000;
         for (int i = 0; i < iterations; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
+            Journal.WriteType writeType = i % 2 == 0 ? Journal.WriteType.SYNC : Journal.WriteType.ASYNC;
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), writeType);
         }
 
         // Replay the journal forward by redoing:
         int i = 0;
         for (Location location : journal.redo()) {
-            byte[] record = journal.read(location);
+            byte[] record = journal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + i++, new String(record, "UTF-8"));
         }
-        
+
         // Replay the journal backward by undoing:
         int j = 1000;
         for (Location location : journal.undo()) {
-            byte[] record = journal.read(location);
+            byte[] record = journal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + --i, new String(record, "UTF-8"));
         }
 
@@ -69,5 +69,4 @@ public class ApiTest {
         JOURNAL_DIR.delete();
         JOURNAL_DIR.mkdir();
     }
-
 }

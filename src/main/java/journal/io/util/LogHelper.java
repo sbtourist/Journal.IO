@@ -23,13 +23,19 @@ import java.util.logging.Logger;
 public class LogHelper {
 
     private static final Logger LOG = Logger.getLogger(LogHelper.class.getName());
-
+    
     public static void warn(String message, Object... args) {
         if (LOG.isLoggable(Level.WARNING)) {
             LOG.log(Level.WARNING, String.format(message, args));
         }
     }
-
+    
+    public static void warn(Throwable e, String message) {
+        if (LOG.isLoggable(Level.WARNING)) {
+            LOG.log(Level.WARNING, message, e);
+        }
+    }
+    
     public static void warn(Throwable e, String message, Object... args) {
         if (LOG.isLoggable(Level.WARNING)) {
             LOG.log(Level.WARNING, String.format(message, args), e);
@@ -39,6 +45,12 @@ public class LogHelper {
     public static void error(String message, Object... args) {
         if (LOG.isLoggable(Level.SEVERE)) {
             LOG.log(Level.SEVERE, String.format(message, args));
+        }
+    }
+    
+    public static void error(Throwable e, String message) {
+        if (LOG.isLoggable(Level.SEVERE)) {
+            LOG.log(Level.SEVERE, message, e);
         }
     }
 

@@ -14,17 +14,24 @@
 package journal.io.api;
 
 /**
- * Listener interface, notified at write syncing.
+ * Callback interface, providing methods notified after write syncing either succeeds or fails.
  *
- * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
+ * @author Sergio Bossa
  */
-public interface JournalListener {
+public interface WriteCallback {
 
-    public interface Write {
-
-        Location getLocation();
-    }
-
-    public void synced(Write[] writes);
-
+    /**
+     * Method called after successful write syncing.
+     * 
+     * @param syncedLocation 
+     */
+    void onSync(Location syncedLocation);
+    
+    /**
+     * Method called after failed write syncing.
+     * 
+     * @param location
+     * @param error 
+     */
+    void onError(Location location, Throwable error);
 }

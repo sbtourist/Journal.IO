@@ -1,15 +1,15 @@
 /**
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
  */
 package journal.io.api;
 
@@ -20,7 +20,7 @@ import java.util.concurrent.CountDownLatch;
 
 /**
  * Represent a location inside the journal.
- * 
+ *
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
  */
@@ -37,6 +37,7 @@ public final class Location implements Comparable<Location> {
     private volatile int pointer = NOT_SET;
     private volatile int size = NOT_SET;
     private volatile byte type = ANY_RECORD_TYPE;
+    private volatile WriteCallback writeCallback = NoWriteCallback.INSTANCE;
     private volatile byte[] data;
     private CountDownLatch latch;
 
@@ -115,6 +116,14 @@ public final class Location implements Comparable<Location> {
         this.latch = latch;
     }
 
+    void setWriteCallback(WriteCallback writeCallback) {
+        this.writeCallback = writeCallback;
+    }
+
+    WriteCallback getWriteCallback() {
+        return writeCallback;
+    }
+
     void setData(byte[] data) {
         this.data = data;
     }
@@ -158,4 +167,16 @@ public final class Location implements Comparable<Location> {
         return dataFileId ^ pointer;
     }
 
+    static class NoWriteCallback implements WriteCallback {
+
+        public static final WriteCallback INSTANCE = new NoWriteCallback();
+
+        @Override
+        public void onSync(Location syncedLocation) {
+        }
+
+        @Override
+        public void onError(Location location, Throwable error) {
+        }
+    }
 }

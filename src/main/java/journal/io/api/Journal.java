@@ -96,8 +96,6 @@ public class Journal {
     //
     private boolean archiveFiles;
     //
-    private JournalListener listener;
-    //
     private ReplicationTarget replicationTarget;
 
     /**
@@ -209,53 +207,64 @@ public class Journal {
     public void sync() throws IOException {
         try {
             appender.sync().get();
+            if (appender.getAsyncException() != null) {
+                throw new IOException(appender.getAsyncException());
+            }
         } catch (Exception ex) {
             throw new IllegalStateException(ex.getMessage(), ex);
         }
     }
 
     /**
-     * Read the record stored at the given {@link Location}, taking advantage of
-     * speculative disk reads.
-     *
-     * @param location
-     * @return
-     * @throws IOException
-     * @throws IllegalStateException
-     */
-    public byte[] read(Location location) throws IOException, IllegalStateException {
-        return accessor.readLocation(location, false);
-    }
-
-    /**
      * Read the record stored at the given {@link Location}, either by syncing
-     * with the disk state (if true) or by taking advantage of speculative disk
-     * reads (if false); the latter is faster, while the former is slower but
+     * with the disk state (if {@code ReadType.SYNC}) or by taking advantage of
+     * speculative disk
+     * reads (if {@code ReadType.ASYNC}); the latter is faster, while the former
+     * is slower but
      * will suddenly detect deleted records.
      *
      * @param location
-     * @param sync
+     * @param read
      * @return
      * @throws IOException
      * @throws IllegalStateException
      */
-    public byte[] read(Location location, boolean sync) throws IOException, IllegalStateException {
-        return accessor.readLocation(location, sync);
+    public byte[] read(Location location, ReadType read) throws IOException, IllegalStateException {
+        return accessor.readLocation(location, read.equals(ReadType.SYNC) ? true : false);
     }
 
     /**
-     * Write the given byte buffer record, either sync or async, and returns the
+     * Write the given byte buffer record, either sync (if {@code WriteType.SYNC})
+     * or async (if {@code WriteType.ASYNC}), and returns the
      * stored {@link Location}.<br/> A sync write causes all previously batched
      * async writes to be synced too.
      *
      * @param data
-     * @param sync True if sync, false if async.
+     * @param write
      * @return
      * @throws IOException
      * @throws IllegalStateException
      */
-    public Location write(byte[] data, boolean sync) throws IOException, IllegalStateException {
-        Location loc = appender.storeItem(data, Location.USER_RECORD_TYPE, sync);
+    public Location write(byte[] data, WriteType write) throws IOException, IllegalStateException {
+        return write(data, write, Location.NoWriteCallback.INSTANCE);
+    }
+
+    /**
+     * Write the given byte buffer record, either sync (if {@code WriteType.SYNC})
+     * or async (if {@code WriteType.ASYNC}), and returns the
+     * stored {@link Location}.<br/> A sync write causes all previously batched
+     * async writes to be synced too.<br/> The provided callback will be invoked
+     * if sync is completed or if some error occurs during syncing.
+     *
+     * @param data
+     * @param write
+     * @param callback
+     * @return
+     * @throws IOException
+     * @throws IllegalStateException
+     */
+    public Location write(byte[] data, WriteType write, WriteCallback callback) throws IOException, IllegalStateException {
+        Location loc = appender.storeItem(data, Location.USER_RECORD_TYPE, write.equals(WriteType.SYNC) ? true : false, callback);
         return loc;
     }
 
@@ -520,24 +529,6 @@ public class Journal {
     }
 
     /**
-     * Get the {@link JournalListener} to notify when syncing batches.
-     *
-     * @return
-     */
-    public JournalListener getListener() {
-        return listener;
-    }
-
-    /**
-     * Set the {@link JournalListener} to notify when syncing batches.
-     *
-     * @param listener
-     */
-    public void setListener(JournalListener listener) {
-        this.listener = listener;
-    }
-
-    /**
      * Set the milliseconds interval for resources disposal: i.e., un-accessed
      * files will be closed.
      *
@@ -677,7 +668,7 @@ public class Journal {
                 batch.appendBatch(write);
                 currentUserLocation = goToNextLocation(currentUserLocation, Location.USER_RECORD_TYPE, false);
             }
-            batch.perform(raf, null, null, true, true);
+            batch.perform(raf, true, true, null);
         } finally {
             if (raf != null) {
                 raf.close();
@@ -727,6 +718,16 @@ public class Journal {
             }
         }
         return currentUserRecord;
+    }
+
+    public static enum ReadType {
+
+        SYNC, ASYNC;
+    }
+
+    public static enum WriteType {
+
+        SYNC, ASYNC;
     }
 
     static class WriteBatch {
@@ -781,7 +782,7 @@ public class Journal {
             writes.offer(writeRecord);
         }
 
-        void perform(RandomAccessFile file, JournalListener listener, ReplicationTarget replicator, boolean checksum, boolean physicalSync) throws IOException {
+        void perform(RandomAccessFile file, boolean checksum, boolean physicalSync, ReplicationTarget replicationTarget) throws IOException {
             ByteBuffer buffer = ByteBuffer.allocate(size);
             Checksum adler32 = new Adler32();
             WriteCommand control = writes.peek();
@@ -819,20 +820,15 @@ public class Journal {
             file.seek(offset);
             file.write(buffer.array(), 0, size);
 
+            // Then sync:
             if (physicalSync) {
                 IOHelper.sync(file.getFD());
             }
 
+            // And replicate:
             try {
-                if (listener != null) {
-                    listener.synced(writes.toArray(new WriteCommand[writes.size()]));
-                }
-            } catch (Throwable ex) {
-                warn("Cannot notify listeners!", ex);
-            }
-            try {
-                if (replicator != null) {
-                    replicator.replicate(control.location, buffer.array());
+                if (replicationTarget != null) {
+                    replicationTarget.replicate(control.location, buffer.array());
                 }
             } catch (Throwable ex) {
                 warn("Cannot replicate!", ex);
@@ -864,7 +860,7 @@ public class Journal {
         }
     }
 
-    static class WriteCommand implements JournalListener.Write {
+    static class WriteCommand {
 
         private final Location location;
         private final boolean sync;
