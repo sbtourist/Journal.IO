@@ -385,13 +385,13 @@ public class JournalTest {
         }
         assertEquals(iterations * 2, index);
     }
-    
+
     @Test
     public void testLogRecoveryWithDeletes() throws Exception {
         int iterations = 10;
         //
         for (int i = 0; i < iterations; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
+            Journal.WriteType sync = i % 2 == 0 ? Journal.WriteType.SYNC : Journal.WriteType.ASYNC;
             Location written = journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
             journal.delete(written);
         }
@@ -400,13 +400,13 @@ public class JournalTest {
         //
         journal.open();
     }
-    
+
     @Test
     public void testLogRecoveryWithDeletesAndCompact() throws Exception {
         int iterations = 10;
         //
         for (int i = 0; i < iterations; i++) {
-            boolean sync = i % 2 == 0 ? true : false;
+            Journal.WriteType sync = i % 2 == 0 ? Journal.WriteType.SYNC : Journal.WriteType.ASYNC;
             Location written = journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
             journal.delete(written);
         }
