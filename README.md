@@ -97,7 +97,8 @@ And then declaring the dependency:
 
 ## Feedback
 
-Join the mailing list at: http://groups.google.com/group/journalio 
+Join the mailing list at: http://groups.google.com/group/journalio.
+
 Or feel free to contact [me](http://www.twitter.com/sbtourist) on Twitter.
 
 ## License
@@ -109,5 +110,7 @@ Journal.IO is based on the HawtJournal project, for original copyright note see:
 ## Developers
 
 [Sergio Bossa](http://www.twitter.com/sbtourist) (Journal.IO lead).
+
 [Hiram Chirino](http://www.twitter.com/hiramchirino) (Original author of the HawtJournal project).
+
 [Chris Vest](http://www.twitter.com/chvest) (Contributor)
