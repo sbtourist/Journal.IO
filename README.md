@@ -92,7 +92,7 @@ And then declaring the dependency:
     <dependency>
         <groupId>journalio</groupId>
        <artifactId>journalio</artifactId>
-       <version>1.0</version>
+       <version>1.1</version>
     </dependency>
 
 ## Feedback
