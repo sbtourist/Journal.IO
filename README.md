@@ -3,7 +3,8 @@
 Journal.IO is a zero-dependency, fast and easy-to-use journal storage implementation based on append-only rotating logs and checksummed variable-length records, 
 supporting concurrent reads and writes, dynamic batching, tunable durability and data compaction.
 
-Journal.IO is a fork of the [HawtJournal](https://github.com/fusesource/hawtjournal) project.
+Journal.IO has been forked from the [HawtJournal](https://github.com/fusesource/hawtjournal) project, 
+in order to provide faster development and release cycles, as well as foster open collaboration.
 
 ## Quickstart
 
@@ -22,16 +23,26 @@ And write some records:
 
     for (int i = 0; i < writes; i++) {
         boolean sync = i % 2 == 0 ? true : false;
-        journal.write(new String("DATA" + i), sync);
+        journal.write(new String("DATA" + i), WriteType.SYNC);
     }
 
-You can dynamically write either in async or sync mode: in async mode, writes are batched until either the max batch size is reached, 
+You can dynamically write either in async (_WriteType.ASYNC_) or sync mode (_WriteType.SYNC_): 
+in async mode, writes are batched until either the max batch size is reached, 
 the journal is manually synced or closed, or a sync write is executed.
 
-Finally, replay the log by going through the Journal "redo" iterable, obtaining record locations:
+The, forward-replay the log by going through the Journal "redo" iterable, obtaining record locations by reading them either in
+async (_ReadType.ASYNC_) or sync mode (_ReadType.SYNC_): async mode takes advantage of speculative reads and so it's faster than sync mode, 
+which instead is slower but able to suddenly detect deleted records:
 
     for (Location location : journal.redo()) {
-        byte[] record = journal.read(location);
+        byte[] record = journal.read(location, ReadType.SYNC);
+        // do something
+    }
+
+You can also backward-replay the log by going through the Journal "undo" iterable:
+
+    for (Location location : journal.undo()) {
+        byte[] record = journal.read(location, ReadType.SYNC);
         // do something
     }
 
@@ -86,10 +97,17 @@ And then declaring the dependency:
 
 ## Feedback
 
-A mailing list will be created soon; in the meantime, for any kind of feedback please contact [me](http://www.twitter.com/sbtourist) on Twitter.
+Join the mailing list at: http://groups.google.com/group/journalio 
+Or feel free to contact [me](http://www.twitter.com/sbtourist) on Twitter.
 
 ## License
 
 Distributed under the [Apache Software License](http://www.apache.org/licenses/LICENSE-2.0.html).
 
 Journal.IO is based on the HawtJournal project, for original copyright note see: [HawtJournal](https://github.com/fusesource/hawtjournal).
+
+## Developers
+
+[Sergio Bossa](http://www.twitter.com/sbtourist) (Journal.IO lead).
+[Hiram Chirino](http://www.twitter.com/hiramchirino) (Original author of the HawtJournal project).
+[Chris Vest](http://www.twitter.com/chvest) (Contributor)
