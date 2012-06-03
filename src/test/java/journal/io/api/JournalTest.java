@@ -638,6 +638,27 @@ public class JournalTest {
         assertEquals(iterations - (iterations / 4), locations);
     }
 
+    @Test
+    public void testRedoWithNewJournalInstance() throws Exception {
+        int iterations = 30;
+        for (int i = 0; i < iterations; i++) {
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+        }
+
+        journal.close();
+
+        Journal newJournal = new Journal();
+        newJournal.setDirectory(dir);
+        configure(newJournal);
+        newJournal.open();
+
+        int i = 0;
+        for (Location location : newJournal.redo()) {
+            byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
+            assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
+        }
+    }
+
     protected void configure(Journal journal) {
         journal.setMaxFileLength(1024);
         journal.setMaxWriteBatchSize(1024);

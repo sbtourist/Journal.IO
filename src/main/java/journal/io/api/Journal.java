@@ -137,6 +137,9 @@ public class Journal {
                     String numStr = n.substring(filePrefix.length(), n.length() - fileSuffix.length());
                     int num = Integer.parseInt(numStr);
                     DataFile dataFile = new DataFile(file, num);
+                    if (!dataFiles.isEmpty()) {
+                        dataFiles.lastEntry().getValue().setNext(dataFile);
+                    }
                     dataFiles.put(dataFile.getDataFileId(), dataFile);
                     totalLength.addAndGet(dataFile.getLength());
                 } catch (NumberFormatException e) {
@@ -682,25 +685,33 @@ public class Journal {
     }
 
     private Location recoveryCheck() throws IOException {
-        Location currentBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
+        Location last = new Location(1, PRE_START_POINTER);
+        for (DataFile file : dataFiles.values()) {
+            last = recoveryCheck(file);
+        }
+        return last;
+    }
+
+    private Location recoveryCheck(DataFile file) throws IOException {
+        Location currentBatch = goToFirstLocation(file, Location.BATCH_CONTROL_RECORD_TYPE, false);
         Location nextBatch = null;
         while (true) {
             if (isChecksum()) {
                 ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
                 long expectedChecksum = currentBatchBuffer.getLong();
                 Checksum actualChecksum = new Adler32();
-                Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, true);
+                Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, false);
                 while (nextLocation != null && nextLocation.getType() != Location.BATCH_CONTROL_RECORD_TYPE) {
                     byte data[] = accessor.readLocation(nextLocation, false);
                     actualChecksum.update(data, 0, data.length);
-                    nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, true);
+                    nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, false);
                 }
                 if (expectedChecksum != actualChecksum.getValue()) {
                     throw new IOException("Bad checksum for location: " + currentBatch);
                 }
                 nextBatch = nextLocation;
             } else {
-                nextBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
+                nextBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, false);
             }
             if (nextBatch != null) {
                 currentBatch = nextBatch;
