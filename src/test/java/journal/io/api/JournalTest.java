@@ -657,6 +657,7 @@ public class JournalTest {
             byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
+        assertEquals(30, i);
     }
 
     protected void configure(Journal journal) {
