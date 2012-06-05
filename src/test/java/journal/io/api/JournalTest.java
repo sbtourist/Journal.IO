@@ -362,7 +362,7 @@ public class JournalTest {
 
     @Test
     public void testLogRecoveryWithFollowingWrites() throws Exception {
-        int iterations = 10;
+        int iterations = 100;
         //
         for (int i = 0; i < iterations; i++) {
             Journal.WriteType sync = i % 2 == 0 ? Journal.WriteType.SYNC : Journal.WriteType.ASYNC;

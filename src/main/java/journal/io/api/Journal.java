@@ -615,7 +615,7 @@ public class Journal {
                 if (goToNextFile) {
                     currentDataFile = currentDataFile.getNext();
                     if (currentDataFile != null) {
-                        currentLocation = new Location(currentDataFile.getDataFileId(), 0);
+                        result = goToFirstLocation(currentDataFile, type, true);
                     } else {
                         break;
                     }
@@ -685,17 +685,9 @@ public class Journal {
     }
 
     private Location recoveryCheck() throws IOException {
-        Location last = new Location(1, PRE_START_POINTER);
-        for (DataFile file : dataFiles.values()) {
-            last = recoveryCheck(file);
-        }
-        return last;
-    }
-
-    private Location recoveryCheck(DataFile file) throws IOException {
-        Location currentBatch = goToFirstLocation(file, Location.BATCH_CONTROL_RECORD_TYPE, false);
-        Location nextBatch = null;
-        while (true) {
+        DataFile currentFile = dataFiles.firstEntry().getValue();
+        Location currentBatch = goToFirstLocation(currentFile, Location.BATCH_CONTROL_RECORD_TYPE, false);
+        while (currentFile != null && currentBatch != null) {
             if (isChecksum()) {
                 ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
                 long expectedChecksum = currentBatchBuffer.getLong();
@@ -709,14 +701,16 @@ public class Journal {
                 if (expectedChecksum != actualChecksum.getValue()) {
                     throw new IOException("Bad checksum for location: " + currentBatch);
                 }
-                nextBatch = nextLocation;
+                if (nextLocation != null) {
+                    currentBatch = nextLocation;
+                } else {
+                    currentFile = currentFile.getNext();
+                    if (currentFile != null) {
+                        currentBatch = goToFirstLocation(currentFile, Location.BATCH_CONTROL_RECORD_TYPE, false);
+                    }
+                }
             } else {
-                nextBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, false);
-            }
-            if (nextBatch != null) {
-                currentBatch = nextBatch;
-            } else {
-                break;
+                currentBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
             }
         }
         Location currentUserRecord = currentBatch;
