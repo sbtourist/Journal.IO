@@ -594,7 +594,7 @@ public class Journal {
 
     private Location goToFirstLocation(DataFile file, byte type, boolean goToNextFile) throws IOException, IllegalStateException {
         Location start = accessor.readLocationDetails(file.getDataFileId(), 0);
-        if (start != null && start.getType() == type) {
+        if (start != null && (start.getType() == type || type == Location.ANY_RECORD_TYPE)) {
             return start;
         } else if (start != null) {
             return goToNextLocation(start, type, goToNextFile);
@@ -685,32 +685,31 @@ public class Journal {
     }
 
     private Location recoveryCheck() throws IOException {
-        DataFile currentFile = dataFiles.firstEntry().getValue();
-        Location currentBatch = goToFirstLocation(currentFile, Location.BATCH_CONTROL_RECORD_TYPE, false);
-        while (currentFile != null && currentBatch != null) {
+        Location currentBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
+        Location nextBatch = currentBatch;
+        while (nextBatch != null) {
             if (isChecksum()) {
                 ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
                 long expectedChecksum = currentBatchBuffer.getLong();
                 Checksum actualChecksum = new Adler32();
-                Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, false);
+                Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, true);
                 while (nextLocation != null && nextLocation.getType() != Location.BATCH_CONTROL_RECORD_TYPE) {
                     byte data[] = accessor.readLocation(nextLocation, false);
                     actualChecksum.update(data, 0, data.length);
-                    nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, false);
+                    nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, true);
                 }
                 if (expectedChecksum != actualChecksum.getValue()) {
                     throw new IOException("Bad checksum for location: " + currentBatch);
                 }
                 if (nextLocation != null) {
-                    currentBatch = nextLocation;
+                    currentBatch = nextBatch;
+                    nextBatch = nextLocation;
                 } else {
-                    currentFile = currentFile.getNext();
-                    if (currentFile != null) {
-                        currentBatch = goToFirstLocation(currentFile, Location.BATCH_CONTROL_RECORD_TYPE, false);
-                    }
+                    nextBatch = null;
                 }
             } else {
-                currentBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
+                currentBatch = nextBatch;
+                nextBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
             }
         }
         Location currentUserRecord = currentBatch;
