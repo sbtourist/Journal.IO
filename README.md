@@ -113,6 +113,8 @@ Journal.IO is based on the HawtJournal project, for original copyright note see:
 
 [Hiram Chirino](http://www.twitter.com/hiramchirino) (Original author of the HawtJournal project).
 
+[Giuseppe Santoro](https://twitter.com/youest) (Contributor)
+
 [Chris Vest](http://www.twitter.com/chvest) (Contributor)
 
 [Martin Krasser](http://www.twitter.com/mrt1nz) (Contributor)
