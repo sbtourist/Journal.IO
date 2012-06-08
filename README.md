@@ -92,7 +92,7 @@ And then declaring the dependency:
     <dependency>
         <groupId>journalio</groupId>
        <artifactId>journalio</artifactId>
-       <version>1.1</version>
+       <version>1.1.1</version>
     </dependency>
 
 ## Feedback
@@ -109,8 +109,10 @@ Journal.IO is based on the HawtJournal project, for original copyright note see:
 
 ## Developers
 
-[Sergio Bossa](http://www.twitter.com/sbtourist) (Journal.IO lead).
+[Sergio Bossa](http://www.twitter.com/sbtourist) (Journal.IO maintainer).
 
 [Hiram Chirino](http://www.twitter.com/hiramchirino) (Original author of the HawtJournal project).
 
 [Chris Vest](http://www.twitter.com/chvest) (Contributor)
+
+[Martin Krasser](http://www.twitter.com/mrt1nz) (Contributor)
