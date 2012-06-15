@@ -639,10 +639,10 @@ public class JournalTest {
     }
 
     @Test
-    public void testRedoWithNewJournalInstance() throws Exception {
-        int iterations = 30;
+    public void testOpenAndRecoveryJournalInstanceAfterLargeNumberOfWrites() throws Exception {
+        int iterations = 100000;
         for (int i = 0; i < iterations; i++) {
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.ASYNC);
         }
 
         journal.close();
@@ -657,7 +657,7 @@ public class JournalTest {
             byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
-        assertEquals(30, i);
+        assertEquals(iterations, i);
     }
 
     protected void configure(Journal journal) {

@@ -18,8 +18,10 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map.Entry;
@@ -129,14 +131,25 @@ public class Journal {
                 return dir.equals(directory) && n.startsWith(filePrefix) && n.endsWith(fileSuffix);
             }
         });
+        Arrays.sort(files, new Comparator<File>(){
+
+            @Override
+            public int compare(File f1, File f2) {
+                String name1 = f1.getName();
+                    int index1 = Integer.parseInt(name1.substring(filePrefix.length(), name1.length() - fileSuffix.length()));
+                    String name2 = f2.getName();
+                    int index2 = Integer.parseInt(name2.substring(filePrefix.length(), name2.length() - fileSuffix.length()));
+                    return index1 - index2;
+            }
+            
+        });
         if (files != null && files.length > 0) {
             for (int i = 0; i < files.length; i++) {
                 try {
                     File file = files[i];
-                    String n = file.getName();
-                    String numStr = n.substring(filePrefix.length(), n.length() - fileSuffix.length());
-                    int num = Integer.parseInt(numStr);
-                    DataFile dataFile = new DataFile(file, num);
+                    String name = file.getName();
+                    int index = Integer.parseInt(name.substring(filePrefix.length(), name.length() - fileSuffix.length()));
+                    DataFile dataFile = new DataFile(file, index);
                     if (!dataFiles.isEmpty()) {
                         dataFiles.lastEntry().getValue().setNext(dataFile);
                     }
