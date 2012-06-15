@@ -642,7 +642,7 @@ public class JournalTest {
     public void testOpenAndRecoveryJournalInstanceAfterLargeNumberOfWrites() throws Exception {
         int iterations = 100000;
         for (int i = 0; i < iterations; i++) {
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.ASYNC);
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
         }
 
         journal.close();

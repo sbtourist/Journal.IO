@@ -699,8 +699,8 @@ public class Journal {
 
     private Location recoveryCheck() throws IOException {
         Location currentBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
-        Location nextBatch = currentBatch;
-        while (nextBatch != null) {
+        Location lastBatch = currentBatch;
+        while (currentBatch != null) {
             if (isChecksum()) {
                 ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
                 long expectedChecksum = currentBatchBuffer.getLong();
@@ -715,17 +715,15 @@ public class Journal {
                     throw new IOException("Bad checksum for location: " + currentBatch);
                 }
                 if (nextLocation != null) {
-                    currentBatch = nextBatch;
-                    nextBatch = nextLocation;
-                } else {
-                    nextBatch = null;
+                    lastBatch = nextLocation;
                 }
+                currentBatch = nextLocation;
             } else {
-                currentBatch = nextBatch;
-                nextBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
+                lastBatch = currentBatch;
+                currentBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
             }
         }
-        Location currentUserRecord = currentBatch;
+        Location currentUserRecord = lastBatch;
         while (true) {
             Location next = goToNextLocation(currentUserRecord, Location.USER_RECORD_TYPE, false);
             if (next != null) {
