@@ -39,7 +39,6 @@ import static journal.io.util.LogHelper.*;
  */
 class DataFileAccessor {
 
-    private final ScheduledExecutorService disposer = Executors.newSingleThreadScheduledExecutor();
     private final ConcurrentMap<Thread, ConcurrentMap<Integer, RandomAccessFile>> perThreadDataFileRafs = new ConcurrentHashMap<Thread, ConcurrentMap<Integer, RandomAccessFile>>();
     private final ConcurrentMap<Thread, ConcurrentMap<Integer, Lock>> perThreadDataFileLocks = new ConcurrentHashMap<Thread, ConcurrentMap<Integer, Lock>>();
     private final ReadWriteLock compactionLock = new ReentrantReadWriteLock();
@@ -47,6 +46,8 @@ class DataFileAccessor {
     private final Lock compactorMutex = compactionLock.writeLock();
     //
     private final Journal journal;
+    //    
+    private volatile ScheduledExecutorService disposer;
 
     public DataFileAccessor(Journal journal) {
         this.journal = journal;
@@ -201,11 +202,12 @@ class DataFileAccessor {
     }
 
     void open() {
+        disposer = journal.getDisposer();
         disposer.scheduleAtFixedRate(new ResourceDisposer(), journal.getDisposeInterval(), journal.getDisposeInterval(), TimeUnit.MILLISECONDS);
     }
 
     void close() {
-        disposer.shutdown();
+        // No-op as of now...
     }
 
     void pause() {

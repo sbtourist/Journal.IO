@@ -639,22 +639,39 @@ public class JournalTest {
     }
 
     @Test
-    public void testOpenAndRecoveryJournalInstanceAfterLargeNumberOfWrites() throws Exception {
+    public void testOpenAndRecoveryWithNewJournalInstanceAfterLargeNumberOfWrites() throws Exception {
         int iterations = 100000;
         for (int i = 0; i < iterations; i++) {
             journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
         }
-
         journal.close();
 
         Journal newJournal = new Journal();
         newJournal.setDirectory(dir);
         configure(newJournal);
         newJournal.open();
-
         int i = 0;
         for (Location location : newJournal.redo()) {
             byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
+            assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
+        }
+        assertEquals(iterations, i);
+    }
+    
+    @Test
+    public void testJournalWithExternalExecutor() throws Exception {
+        Journal customJournal = new Journal();
+        customJournal.setDirectory(dir);
+        customJournal.setWriter(Executors.newFixedThreadPool(10));
+        configure(customJournal);
+        customJournal.open();
+        int iterations = 100000;
+        for (int i = 0; i < iterations; i++) {
+            customJournal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+        }
+        int i = 0;
+        for (Location location : customJournal.redo()) {
+            byte[] buffer = customJournal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
         assertEquals(iterations, i);
