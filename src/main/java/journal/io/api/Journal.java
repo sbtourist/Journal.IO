@@ -33,6 +33,7 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -103,7 +104,7 @@ public class Journal {
     //
     private volatile boolean managedWriter;
     private volatile boolean managedDisposer;
-    private volatile ExecutorService writer;
+    private volatile Executor writer;
     private volatile ScheduledExecutorService disposer;
     private volatile DataFileAppender appender;
     private volatile DataFileAccessor accessor;
@@ -203,7 +204,7 @@ public class Journal {
         inflightWrites.clear();
         //
         if (managedWriter) {
-            writer.shutdown();
+            ((ExecutorService) writer).shutdown();
             writer = null;
         }
         if (managedDisposer) {
@@ -595,13 +596,13 @@ public class Journal {
     }
 
     /**
-     * Set the ExecutorService to use for writing new record entries.
+     * Set the Executor to use for writing new record entries.
      *
-     * Important note: the provided ExecutorService must be manually closed.
+     * Important note: the provided Executor must be manually closed.
      *
      * @param writer
      */
-    public void setWriter(ExecutorService writer) {
+    public void setWriter(Executor writer) {
         this.writer = writer;
         this.managedWriter = false;
     }
@@ -623,7 +624,7 @@ public class Journal {
         return directory.toString();
     }
 
-    ExecutorService getWriter() {
+    Executor getWriter() {
         return writer;
     }
 
