@@ -33,7 +33,6 @@ import static org.junit.Assert.*;
  */
 public class JournalTest {
 
-    protected static final int DEFAULT_MAX_BATCH_SIZE = 1024 * 1024 * 4;
     private Journal journal;
     private File dir;
 
