@@ -36,8 +36,6 @@ import static journal.io.util.LogHelper.*;
  */
 class DataFileAppender {
 
-    private final WriteBatch NULL_BATCH = new WriteBatch();
-    //
     private final int SPIN_RETRIES = 100;
     private final int SPIN_BACKOFF = 10;
     //
