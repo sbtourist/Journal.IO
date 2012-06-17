@@ -132,23 +132,11 @@ public class Journal {
         }
         if (writer == null) {
             managedWriter = true;
-            writer = Executors.newSingleThreadExecutor(new ThreadFactory() {
-
-                @Override
-                public Thread newThread(Runnable r) {
-                    return new Thread(new ThreadGroup(WRITER_THREAD_GROUP), r, WRITER_THREAD);
-                }
-            });
+            writer = Executors.newSingleThreadExecutor(new JournalThreadFactory(WRITER_THREAD_GROUP, WRITER_THREAD));
         }
         if (disposer == null) {
             managedDisposer = true;
-            disposer = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-
-                @Override
-                public Thread newThread(Runnable r) {
-                    return new Thread(new ThreadGroup(DISPOSER_THREAD_GROUP), r, DISPOSER_THREAD);
-                }
-            });
+            disposer = Executors.newSingleThreadScheduledExecutor(new JournalThreadFactory(DISPOSER_THREAD_GROUP, DISPOSER_THREAD));
         }
 
         opened = true;
@@ -608,22 +596,23 @@ public class Journal {
 
     /**
      * Set the ExecutorService to use for writing new record entries.
-     * 
+     *
      * Important note: the provided ExecutorService must be manually closed.
-     * 
-     * @param writer 
+     *
+     * @param writer
      */
     public void setWriter(ExecutorService writer) {
         this.writer = writer;
         this.managedWriter = false;
     }
-    
+
     /**
      * Set the ScheduledExecutorService to use for internal resources disposing.
-     * 
-     * Important note: the provided ScheduledExecutorService must be manually closed.
-     * 
-     * @param writer 
+     *
+     * Important note: the provided ScheduledExecutorService must be manually
+     * closed.
+     *
+     * @param writer
      */
     public void setDisposer(ScheduledExecutorService disposer) {
         this.disposer = disposer;
@@ -1003,6 +992,22 @@ public class Journal {
         public Boolean get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
             boolean success = latch.await(timeout, unit);
             return success;
+        }
+    }
+
+    private static class JournalThreadFactory implements ThreadFactory {
+
+        private final String groupName;
+        private final String threadName;
+
+        public JournalThreadFactory(String groupName, String threadName) {
+            this.groupName = groupName;
+            this.threadName = threadName;
+        }
+
+        @Override
+        public Thread newThread(Runnable r) {
+            return new Thread(new ThreadGroup(groupName), r, threadName);
         }
     }
 
