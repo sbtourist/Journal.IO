@@ -19,10 +19,10 @@ import journal.io.api.Journal.WriteFuture;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.RandomAccessFile;
-import java.util.concurrent.BlockingQueue;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import static journal.io.util.LogHelper.*;
@@ -39,7 +39,7 @@ class DataFileAppender {
     private final int SPIN_RETRIES = 100;
     private final int SPIN_BACKOFF = 10;
     //
-    private final BlockingQueue<WriteBatch> batchQueue = new LinkedBlockingQueue<WriteBatch>();
+    private final Queue<WriteBatch> batchQueue = new ConcurrentLinkedQueue<WriteBatch>();
     private final AtomicReference<Exception> asyncException = new AtomicReference<Exception>();
     private final AtomicBoolean batching = new AtomicBoolean(false);
     private final AtomicBoolean writing = new AtomicBoolean(false);
@@ -94,7 +94,7 @@ class DataFileAppender {
                         Future result = null;
                         if (nextWriteBatch != null) {
                             result = new WriteFuture(nextWriteBatch.getLatch());
-                            batchQueue.put(nextWriteBatch);
+                            batchQueue.offer(nextWriteBatch);
                             signalBatch();
                             nextWriteBatch = null;
                         } else {
@@ -154,7 +154,7 @@ class DataFileAppender {
                                 journal.getInflightWrites().put(writeRecord.getLocation(), writeRecord);
                                 nextWriteBatch = currentBatch;
                             } else {
-                                batchQueue.put(currentBatch);
+                                batchQueue.offer(currentBatch);
                                 hasNewBatch = true;
                             }
                             journal.setLastAppendLocation(writeRecord.getLocation());
@@ -172,12 +172,12 @@ class DataFileAppender {
                             } else if (canBatch && writeRecord.isSync()) {
                                 nextWriteBatch.appendBatch(writeRecord);
                                 journal.setLastAppendLocation(writeRecord.getLocation());
-                                batchQueue.put(nextWriteBatch);
+                                batchQueue.offer(nextWriteBatch);
                                 nextWriteBatch = null;
                                 hasNewBatch = true;
                                 break;
                             } else {
-                                batchQueue.put(nextWriteBatch);
+                                batchQueue.offer(nextWriteBatch);
                                 nextWriteBatch = null;
                                 hasNewBatch = true;
                             }
@@ -222,7 +222,7 @@ class DataFileAppender {
                         Thread.sleep(SPIN_BACKOFF);
                     }
                     if (nextWriteBatch != null) {
-                        batchQueue.put(nextWriteBatch);
+                        batchQueue.offer(nextWriteBatch);
                         signalBatch();
                         nextWriteBatch.getLatch().await();
                         nextWriteBatch = null;
