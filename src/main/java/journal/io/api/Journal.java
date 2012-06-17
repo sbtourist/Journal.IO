@@ -24,6 +24,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Queue;
@@ -98,6 +100,8 @@ public class Journal {
     //
     private boolean archiveFiles;
     //
+    private RecoveryErrorHandler recoveryErrorHandler;
+    //
     private ReplicationTarget replicationTarget;
 
     /**
@@ -117,6 +121,10 @@ public class Journal {
             throw new IllegalStateException("Max batch size must be equal or less than: " + maxFileLength);
         }
 
+        if (recoveryErrorHandler == null) {
+            recoveryErrorHandler = RecoveryErrorHandler.ABORT;
+        }
+
         opened = true;
 
         accessor = new DataFileAccessor(this);
@@ -131,17 +139,16 @@ public class Journal {
                 return dir.equals(directory) && n.startsWith(filePrefix) && n.endsWith(fileSuffix);
             }
         });
-        Arrays.sort(files, new Comparator<File>(){
+        Arrays.sort(files, new Comparator<File>() {
 
             @Override
             public int compare(File f1, File f2) {
                 String name1 = f1.getName();
-                    int index1 = Integer.parseInt(name1.substring(filePrefix.length(), name1.length() - fileSuffix.length()));
-                    String name2 = f2.getName();
-                    int index2 = Integer.parseInt(name2.substring(filePrefix.length(), name2.length() - fileSuffix.length()));
-                    return index1 - index2;
+                int index1 = Integer.parseInt(name1.substring(filePrefix.length(), name1.length() - fileSuffix.length()));
+                String name2 = f2.getName();
+                int index2 = Integer.parseInt(name2.substring(filePrefix.length(), name2.length() - fileSuffix.length()));
+                return index1 - index2;
             }
-            
         });
         if (files != null && files.length > 0) {
             for (int i = 0; i < files.length; i++) {
@@ -563,6 +570,15 @@ public class Journal {
         return disposeInterval;
     }
 
+    /**
+     * Set the RecoveryErrorHandler to invoke in case of checksum errors.
+     *
+     * @param recoveryErrorHandler
+     */
+    public void setRecoveryErrorHandler(RecoveryErrorHandler recoveryErrorHandler) {
+        this.recoveryErrorHandler = recoveryErrorHandler;
+    }
+
     public String toString() {
         return directory.toString();
     }
@@ -698,21 +714,24 @@ public class Journal {
     }
 
     private Location recoveryCheck() throws IOException {
+        List<Location> checksummedLocations = new LinkedList<Location>();
         Location currentBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
         Location lastBatch = currentBatch;
         while (currentBatch != null) {
             if (isChecksum()) {
                 ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
-                long expectedChecksum = currentBatchBuffer.getLong();
                 Checksum actualChecksum = new Adler32();
                 Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, true);
+                long expectedChecksum = currentBatchBuffer.getLong();
+                checksummedLocations.clear();
                 while (nextLocation != null && nextLocation.getType() != Location.BATCH_CONTROL_RECORD_TYPE) {
                     byte data[] = accessor.readLocation(nextLocation, false);
                     actualChecksum.update(data, 0, data.length);
+                    checksummedLocations.add(nextLocation);
                     nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, true);
                 }
                 if (expectedChecksum != actualChecksum.getValue()) {
-                    throw new IOException("Bad checksum for location: " + currentBatch);
+                    recoveryErrorHandler.onError(this, checksummedLocations);
                 }
                 if (nextLocation != null) {
                     lastBatch = nextLocation;
