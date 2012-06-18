@@ -50,8 +50,6 @@ class DataFileAppender {
     private volatile DataFile lastAppendDataFile;
     private volatile RandomAccessFile lastAppendRaf;
     private volatile Executor writer;
-    private volatile boolean running;
-    private volatile boolean shutdown;
 
     DataFileAppender(Journal journal) {
         this.journal = journal;
@@ -82,9 +80,6 @@ class DataFileAppender {
         int spinnings = 0;
         int limit = SPIN_RETRIES;
         while (true) {
-            if (shutdown) {
-                throw new IOException("Writer Thread Shutdown!");
-            }
             if (asyncException.get() != null) {
                 throw new IOException(asyncException.get());
             }
@@ -125,14 +120,11 @@ class DataFileAppender {
         int spinnings = 0;
         int limit = SPIN_RETRIES;
         while (true) {
-            if (shutdown) {
-                throw new IOException("Writer Thread Shutdown!");
-            }
             if (asyncException.get() != null) {
                 throw new IOException(asyncException.get());
             }
             try {
-                if (!shutdown && batching.compareAndSet(false, true)) {
+                if (batching.compareAndSet(false, true)) {
                     boolean hasNewBatch = false;
                     try {
                         if (nextWriteBatch == null) {
@@ -188,7 +180,7 @@ class DataFileAppender {
                             signalBatch();
                         }
                     }
-                } else if (!shutdown) {
+                } else {
                     // Spin waiting for new batch ...
                     if (spinnings <= limit) {
                         spinnings++;
@@ -206,32 +198,23 @@ class DataFileAppender {
     }
 
     void open() {
-        if (!running) {
-            running = true;
-            writer = journal.getWriter();
-        }
+        writer = journal.getWriter();
     }
 
     void close() throws IOException {
         try {
-            if (!shutdown) {
-                if (running) {
-                    shutdown = true;
-                    running = false;
-                    while (batching.get() == true) {
-                        Thread.sleep(SPIN_BACKOFF);
-                    }
-                    if (nextWriteBatch != null) {
-                        batchQueue.offer(nextWriteBatch);
-                        signalBatch();
-                        nextWriteBatch.getLatch().await();
-                        nextWriteBatch = null;
-                    }
-                    journal.setLastAppendLocation(null);
-                    if (lastAppendRaf != null) {
-                        lastAppendRaf.close();
-                    }
-                }
+            while (batching.get() == true) {
+                Thread.sleep(SPIN_BACKOFF);
+            }
+            if (nextWriteBatch != null) {
+                batchQueue.offer(nextWriteBatch);
+                signalBatch();
+                nextWriteBatch.getLatch().await();
+                nextWriteBatch = null;
+            }
+            journal.setLastAppendLocation(null);
+            if (lastAppendRaf != null) {
+                lastAppendRaf.close();
             }
         } catch (InterruptedException e) {
             throw new InterruptedIOException();
@@ -260,8 +243,8 @@ class DataFileAppender {
                 // TODO: Improve by employing different spinning strategies?
                 WriteBatch wb = batchQueue.poll();
                 try {
-                    while (!shutdown || wb != null) {
-                        if (wb != null && !wb.isEmpty()) {
+                    while (wb != null) {
+                        if (!wb.isEmpty()) {
                             boolean newOrRotated = lastAppendDataFile != wb.getDataFile();
                             if (newOrRotated) {
                                 if (lastAppendRaf != null) {
