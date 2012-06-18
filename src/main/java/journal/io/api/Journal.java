@@ -33,7 +33,12 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -64,6 +69,11 @@ public class Journal {
     static final int CHECKSUM_SIZE = 8;
     static final int BATCH_CONTROL_RECORD_SIZE = HEADER_SIZE + BATCH_SIZE + CHECKSUM_SIZE;
     //
+    static final String WRITER_THREAD_GROUP = "Journal.IO - Writer Thread Group";
+    static final String WRITER_THREAD = "Journal.IO - Writer Thread";
+    static final String DISPOSER_THREAD_GROUP = "Journal.IO - Disposer Thread Group";
+    static final String DISPOSER_THREAD = "Journal.IO - Disposer Thread";
+    //
     static final int PRE_START_POINTER = -1;
     //
     static final String DEFAULT_DIRECTORY = ".";
@@ -78,27 +88,32 @@ public class Journal {
     private final ConcurrentNavigableMap<Integer, DataFile> dataFiles = new ConcurrentSkipListMap<Integer, DataFile>();
     private final ConcurrentNavigableMap<Location, WriteCommand> inflightWrites = new ConcurrentSkipListMap<Location, WriteCommand>();
     private final AtomicLong totalLength = new AtomicLong();
-    private Location lastAppendLocation;
     //
-    private File directory = new File(DEFAULT_DIRECTORY);
-    private File directoryArchive = new File(DEFAULT_ARCHIVE_DIRECTORY);
+    private volatile Location lastAppendLocation;
     //
-    private String filePrefix = DEFAULT_FILE_PREFIX;
-    private String fileSuffix = DEFAULT_FILE_SUFFIX;
-    private int maxWriteBatchSize = DEFAULT_MAX_BATCH_SIZE;
-    private int maxFileLength = DEFAULT_MAX_FILE_LENGTH;
-    private long disposeInterval = DEFAULT_DISPOSE_INTERVAL;
-    private boolean physicalSync = false;
-    private boolean checksum = true;
+    private volatile File directory = new File(DEFAULT_DIRECTORY);
+    private volatile File directoryArchive = new File(DEFAULT_ARCHIVE_DIRECTORY);
     //
-    private DataFileAppender appender;
-    private DataFileAccessor accessor;
+    private volatile String filePrefix = DEFAULT_FILE_PREFIX;
+    private volatile String fileSuffix = DEFAULT_FILE_SUFFIX;
+    private volatile int maxWriteBatchSize = DEFAULT_MAX_BATCH_SIZE;
+    private volatile int maxFileLength = DEFAULT_MAX_FILE_LENGTH;
+    private volatile long disposeInterval = DEFAULT_DISPOSE_INTERVAL;
+    private volatile boolean physicalSync = false;
+    private volatile boolean checksum = true;
     //
-    private boolean opened;
+    private volatile boolean managedWriter;
+    private volatile boolean managedDisposer;
+    private volatile Executor writer;
+    private volatile ScheduledExecutorService disposer;
+    private volatile DataFileAppender appender;
+    private volatile DataFileAccessor accessor;
     //
-    private boolean archiveFiles;
+    private volatile boolean opened;
     //
-    private ReplicationTarget replicationTarget;
+    private volatile boolean archiveFiles;
+    //
+    private volatile ReplicationTarget replicationTarget;
 
     /**
      * Open the journal, eventually recovering it if already existent.
@@ -116,6 +131,14 @@ public class Journal {
         if (maxWriteBatchSize > maxFileLength) {
             throw new IllegalStateException("Max batch size must be equal or less than: " + maxFileLength);
         }
+        if (writer == null) {
+            managedWriter = true;
+            writer = Executors.newSingleThreadExecutor(new JournalThreadFactory(WRITER_THREAD_GROUP, WRITER_THREAD));
+        }
+        if (disposer == null) {
+            managedDisposer = true;
+            disposer = Executors.newSingleThreadScheduledExecutor(new JournalThreadFactory(DISPOSER_THREAD_GROUP, DISPOSER_THREAD));
+        }
 
         opened = true;
 
@@ -131,17 +154,16 @@ public class Journal {
                 return dir.equals(directory) && n.startsWith(filePrefix) && n.endsWith(fileSuffix);
             }
         });
-        Arrays.sort(files, new Comparator<File>(){
+        Arrays.sort(files, new Comparator<File>() {
 
             @Override
             public int compare(File f1, File f2) {
                 String name1 = f1.getName();
-                    int index1 = Integer.parseInt(name1.substring(filePrefix.length(), name1.length() - fileSuffix.length()));
-                    String name2 = f2.getName();
-                    int index2 = Integer.parseInt(name2.substring(filePrefix.length(), name2.length() - fileSuffix.length()));
-                    return index1 - index2;
+                int index1 = Integer.parseInt(name1.substring(filePrefix.length(), name1.length() - fileSuffix.length()));
+                String name2 = f2.getName();
+                int index2 = Integer.parseInt(name2.substring(filePrefix.length(), name2.length() - fileSuffix.length()));
+                return index1 - index2;
             }
-            
         });
         if (files != null && files.length > 0) {
             for (int i = 0; i < files.length; i++) {
@@ -174,11 +196,21 @@ public class Journal {
         if (!opened) {
             return;
         }
+        //
+        opened = false;
         accessor.close();
         appender.close();
         dataFiles.clear();
         inflightWrites.clear();
-        opened = false;
+        //
+        if (managedWriter) {
+            ((ExecutorService) writer).shutdown();
+            writer = null;
+        }
+        if (managedDisposer) {
+            disposer.shutdown();
+            disposer = null;
+        }
     }
 
     /**
@@ -563,8 +595,41 @@ public class Journal {
         return disposeInterval;
     }
 
+    /**
+     * Set the Executor to use for writing new record entries.
+     *
+     * Important note: the provided Executor must be manually closed.
+     *
+     * @param writer
+     */
+    public void setWriter(Executor writer) {
+        this.writer = writer;
+        this.managedWriter = false;
+    }
+
+    /**
+     * Set the ScheduledExecutorService to use for internal resources disposing.
+     *
+     * Important note: the provided ScheduledExecutorService must be manually
+     * closed.
+     *
+     * @param writer
+     */
+    public void setDisposer(ScheduledExecutorService disposer) {
+        this.disposer = disposer;
+        this.managedDisposer = false;
+    }
+
     public String toString() {
         return directory.toString();
+    }
+
+    Executor getWriter() {
+        return writer;
+    }
+
+    ScheduledExecutorService getDisposer() {
+        return disposer;
     }
 
     ConcurrentNavigableMap<Integer, DataFile> getDataFiles() {
@@ -928,6 +993,22 @@ public class Journal {
         public Boolean get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
             boolean success = latch.await(timeout, unit);
             return success;
+        }
+    }
+
+    private static class JournalThreadFactory implements ThreadFactory {
+
+        private final String groupName;
+        private final String threadName;
+
+        public JournalThreadFactory(String groupName, String threadName) {
+            this.groupName = groupName;
+            this.threadName = threadName;
+        }
+
+        @Override
+        public Thread newThread(Runnable r) {
+            return new Thread(new ThreadGroup(groupName), r, threadName);
         }
     }
 

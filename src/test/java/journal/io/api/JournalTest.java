@@ -17,10 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
@@ -33,7 +30,6 @@ import static org.junit.Assert.*;
  */
 public class JournalTest {
 
-    protected static final int DEFAULT_MAX_BATCH_SIZE = 1024 * 1024 * 4;
     private Journal journal;
     private File dir;
 
@@ -639,25 +635,63 @@ public class JournalTest {
     }
 
     @Test
-    public void testOpenAndRecoveryJournalInstanceAfterLargeNumberOfWrites() throws Exception {
+    public void testOpenAndRecoveryWithNewJournalInstanceAfterLargeNumberOfWrites() throws Exception {
         int iterations = 100000;
         for (int i = 0; i < iterations; i++) {
             journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
         }
-
         journal.close();
 
         Journal newJournal = new Journal();
         newJournal.setDirectory(dir);
         configure(newJournal);
         newJournal.open();
-
         int i = 0;
         for (Location location : newJournal.redo()) {
             byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
         assertEquals(iterations, i);
+    }
+    
+    @Test
+    public void testJournalWithExternalExecutor() throws Exception {
+        Journal customJournal = new Journal();
+        customJournal.setDirectory(dir);
+        customJournal.setWriter(Executors.newFixedThreadPool(10));
+        configure(customJournal);
+        customJournal.open();
+        int iterations = 100000;
+        for (int i = 0; i < iterations; i++) {
+            customJournal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+        }
+        int i = 0;
+        for (Location location : customJournal.redo()) {
+            byte[] buffer = customJournal.read(location, Journal.ReadType.ASYNC);
+            assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
+        }
+        assertEquals(iterations, i);
+    }
+
+    @Test
+    public void testJournalWithExternalExecutorAndExecuteWritesWithExecutor() throws Exception {
+        final Journal customJournal = new Journal();
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+        customJournal.setDirectory(dir);
+        customJournal.setWriter(executor);
+        configure(customJournal);
+        customJournal.open();
+
+        final byte[] bytes = "a".getBytes();
+
+        int iterations = 100;
+        for (int i = 0; i < iterations; i++) {
+            executor.submit(new Callable<Location>() {
+                public Location call() throws IOException {
+                    return customJournal.write(bytes, Journal.WriteType.SYNC);
+                }
+            }).get(1, TimeUnit.SECONDS);
+        }
     }
 
     protected void configure(Journal journal) {
