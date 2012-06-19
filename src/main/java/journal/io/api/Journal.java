@@ -24,6 +24,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Queue;
@@ -113,7 +115,9 @@ public class Journal {
     //
     private volatile boolean archiveFiles;
     //
-    private volatile ReplicationTarget replicationTarget;
+    private RecoveryErrorHandler recoveryErrorHandler;
+    //
+    private ReplicationTarget replicationTarget;
 
     /**
      * Open the journal, eventually recovering it if already existent.
@@ -138,6 +142,10 @@ public class Journal {
         if (disposer == null) {
             managedDisposer = true;
             disposer = Executors.newSingleThreadScheduledExecutor(new JournalThreadFactory(DISPOSER_THREAD_GROUP, DISPOSER_THREAD));
+        }
+
+        if (recoveryErrorHandler == null) {
+            recoveryErrorHandler = RecoveryErrorHandler.ABORT;
         }
 
         opened = true;
@@ -620,6 +628,15 @@ public class Journal {
         this.managedDisposer = false;
     }
 
+    /**
+     * Set the RecoveryErrorHandler to invoke in case of checksum errors.
+     *
+     * @param recoveryErrorHandler
+     */
+    public void setRecoveryErrorHandler(RecoveryErrorHandler recoveryErrorHandler) {
+        this.recoveryErrorHandler = recoveryErrorHandler;
+    }
+
     public String toString() {
         return directory.toString();
     }
@@ -763,21 +780,24 @@ public class Journal {
     }
 
     private Location recoveryCheck() throws IOException {
+        List<Location> checksummedLocations = new LinkedList<Location>();
         Location currentBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
         Location lastBatch = currentBatch;
         while (currentBatch != null) {
             if (isChecksum()) {
                 ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
-                long expectedChecksum = currentBatchBuffer.getLong();
                 Checksum actualChecksum = new Adler32();
                 Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, true);
+                long expectedChecksum = currentBatchBuffer.getLong();
+                checksummedLocations.clear();
                 while (nextLocation != null && nextLocation.getType() != Location.BATCH_CONTROL_RECORD_TYPE) {
                     byte data[] = accessor.readLocation(nextLocation, false);
                     actualChecksum.update(data, 0, data.length);
+                    checksummedLocations.add(nextLocation);
                     nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, true);
                 }
                 if (expectedChecksum != actualChecksum.getValue()) {
-                    throw new IOException("Bad checksum for location: " + currentBatch);
+                    recoveryErrorHandler.onError(this, checksummedLocations);
                 }
                 if (nextLocation != null) {
                     lastBatch = nextLocation;
