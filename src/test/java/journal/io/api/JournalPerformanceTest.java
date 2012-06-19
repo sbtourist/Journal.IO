@@ -16,11 +16,13 @@ package journal.io.api;
 import java.io.File;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
  * @author Sergio Bossa
  */
+@Ignore
 public class JournalPerformanceTest {
 
     private Journal journal;

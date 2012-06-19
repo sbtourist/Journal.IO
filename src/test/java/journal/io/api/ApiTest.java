@@ -27,7 +27,7 @@ public class ApiTest {
 
     @Test
     public void api() throws Exception {
-        // Create ournal and configure some settings:
+        // Create journal and configure some settings:
         Journal journal = new Journal();
         journal.setDirectory(JOURNAL_DIR);
         journal.setArchiveFiles(false);
