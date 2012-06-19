@@ -17,10 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
@@ -674,6 +671,27 @@ public class JournalTest {
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
         assertEquals(iterations, i);
+    }
+
+    @Test
+    public void testJournalWithExternalExecutorAndExecuteWritesWithExecutor() throws Exception {
+        final Journal customJournal = new Journal();
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+        customJournal.setDirectory(dir);
+        customJournal.setWriter(executor);
+        configure(customJournal);
+        customJournal.open();
+
+        final byte[] bytes = "a".getBytes();
+
+        int iterations = 100;
+        for (int i = 0; i < iterations; i++) {
+            executor.submit(new Callable<Location>() {
+                public Location call() throws IOException {
+                    return customJournal.write(bytes, Journal.WriteType.SYNC);
+                }
+            }).get(1, TimeUnit.SECONDS);
+        }
     }
 
     protected void configure(Journal journal) {
