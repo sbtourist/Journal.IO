@@ -1,10 +1,10 @@
-# Journal.IO
+# Journal.IO 1.2
 
 Journal.IO is a zero-dependency, fast and easy-to-use journal storage implementation based on append-only rotating logs and checksummed variable-length records, 
 supporting concurrent reads and writes, dynamic batching, tunable durability and data compaction.
 
 Journal.IO has been forked from the [HawtJournal](https://github.com/fusesource/hawtjournal) project, 
-in order to provide faster development and release cycles, as well as foster open collaboration.
+in order to provide new features and fixes with a faster development and release cycle, as well as foster open collaboration.
 
 ## Quickstart
 
@@ -64,7 +64,15 @@ And close it:
 
 That's all!
 
-## About data durability
+## About concurrency
+
+Journal.IO is thread safe: this means the same _Journal_ instance can be concurrently accessed by multiple threads, for both reading and writing, 
+inside the same JVM process.
+
+By the way, you cannot access the same set of journal files from different JVM processes: future Journal.IO versions will implement a simple file locking 
+mechanism to prevent data corruption due to shared file access.
+
+## About durability
 
 Journal.IO provides three levels of data durability: batch, sync and physical sync.
 
@@ -92,7 +100,7 @@ And then declaring the dependency:
     <dependency>
         <groupId>journalio</groupId>
        <artifactId>journalio</artifactId>
-       <version>1.1.1</version>
+       <version>1.2</version>
     </dependency>
 
 ## Feedback
