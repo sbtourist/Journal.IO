@@ -67,10 +67,13 @@ That's all!
 ## About concurrency
 
 Journal.IO is thread safe: this means the same _Journal_ instance can be concurrently accessed by multiple threads, for both reading and writing, 
-inside the same JVM process.
-
-By the way, you cannot access the same set of journal files from different JVM processes: future Journal.IO versions will implement a simple file locking 
+inside the same JVM process. By the way, you cannot access the same set of journal files from different JVM processes: future Journal.IO versions will implement a simple file locking 
 mechanism to prevent data corruption due to shared file access.
+
+Journal.IO provides its own managed threads: exactly one thread for writing batches, and one thread for disposing unused resources, so it is really cheap in
+terms of thread usage. However, you can provide your own managed executors by setting the _Journal#setWriter_ and _Journal#setDisposer_ methods: by doing so, 
+Journal.IO will use the provided executors and hence share threads with other parts of your application; please note this should be done only if you really know what 
+you are doing.
 
 ## About durability
 
