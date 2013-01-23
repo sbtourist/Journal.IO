@@ -262,7 +262,10 @@ public class Journal {
      */
     public void sync() throws IOException {
         try {
-            appender.sync().get();
+            final Future<Boolean> sync = appender.sync();
+            if (sync != null) {
+                sync.get();
+            }
             if (appender.getAsyncException() != null) {
                 throw new IOException(appender.getAsyncException());
             }
