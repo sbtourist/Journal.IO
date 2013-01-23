@@ -21,6 +21,7 @@ import java.io.InterruptedIOException;
 import java.io.RandomAccessFile;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -93,7 +94,11 @@ class DataFileAppender {
                             signalBatch();
                             nextWriteBatch = null;
                         } else {
-                            result = new WriteFuture(journal.getLastAppendLocation().getLatch());
+                            final CountDownLatch latch = journal.getLastAppendLocation().getLatch();
+                            if (latch != null) {
+                                result = new WriteFuture(latch);
+                            }
+                            //Nothing written yet, return null
                         }
                         return result;
                     } finally {

@@ -21,7 +21,7 @@
 
     <groupId>journalio</groupId>
     <artifactId>journalio</artifactId>
-    <packaging>jar</packaging>
+    <packaging>bundle</packaging>
     <version>1.3-SNAPSHOT</version>
 
     <name>Journal.IO</name>
@@ -84,6 +84,17 @@
                     <downloadSources>true</downloadSources>
                     <downloadJavadocs>true</downloadJavadocs>
                     <useProjectReferences>false</useProjectReferences>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <version>2.3.7</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <instructions>
+                        <Export-Package>journal.io.*</Export-Package>
+                    </instructions>
                 </configuration>
             </plugin>
         </plugins>
