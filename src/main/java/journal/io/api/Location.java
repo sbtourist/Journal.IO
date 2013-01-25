@@ -39,7 +39,7 @@ public final class Location implements Comparable<Location> {
     private volatile byte type = ANY_RECORD_TYPE;
     private volatile WriteCallback writeCallback = NoWriteCallback.INSTANCE;
     private volatile byte[] data;
-    private CountDownLatch latch;
+    private volatile CountDownLatch latch;
 
     public Location() {
     }
