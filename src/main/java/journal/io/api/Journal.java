@@ -990,7 +990,7 @@ public class Journal {
         private final CountDownLatch latch;
 
         WriteFuture(CountDownLatch latch) {
-            this.latch = latch;
+            this.latch = latch != null ? latch : new CountDownLatch(0);
         }
 
         public boolean cancel(boolean mayInterruptIfRunning) {

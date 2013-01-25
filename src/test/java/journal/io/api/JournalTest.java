@@ -655,6 +655,27 @@ public class JournalTest {
     }
     
     @Test
+    public void testOpenNewJournalInstanceThenRedoAndDeleteData() throws Exception {
+        int iterations = 10;
+        for (int i = 0; i < iterations; i++) {
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+        }
+        journal.close();
+
+        Journal newJournal = new Journal();
+        newJournal.setDirectory(dir);
+        configure(newJournal);
+        newJournal.open();
+        int i = 0;
+        for (Location location : newJournal.redo()) {
+            byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
+            assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
+            newJournal.delete(location);
+        }
+        assertEquals(iterations, i);
+    }
+    
+    @Test
     public void testJournalWithExternalExecutor() throws Exception {
         Journal customJournal = new Journal();
         customJournal.setDirectory(dir);
