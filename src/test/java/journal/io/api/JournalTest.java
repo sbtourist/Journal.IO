@@ -19,6 +19,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import journal.io.AbstractJournalTest;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -448,14 +449,15 @@ public class JournalTest {
     @Test
     public void testLogCompaction() throws Exception {
         int iterations = 1000;
+        String data = new String(new byte[500], "UTF-8");
         for (int i = 0; i < iterations / 2; i++) {
             Journal.WriteType sync = i % 2 == 0 ? Journal.WriteType.SYNC : Journal.WriteType.ASYNC;
-            Location toDelete = journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
+            Location toDelete = journal.write(new String(data + i).getBytes("UTF-8"), sync);
             journal.delete(toDelete);
         }
         for (int i = iterations / 2; i < iterations; i++) {
             Journal.WriteType sync = i % 2 == 0 ? Journal.WriteType.SYNC : Journal.WriteType.ASYNC;
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), sync);
+            journal.write(new String(data + i).getBytes("UTF-8"), sync);
         }
         //
         int preCleanupFiles = journal.getFiles().size();
@@ -465,7 +467,7 @@ public class JournalTest {
         int i = iterations / 2;
         for (Location location : journal.redo()) {
             byte[] buffer = journal.read(location, Journal.ReadType.ASYNC);
-            assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
+            assertEquals(data + i++, new String(buffer, "UTF-8"));
         }
     }
 
@@ -568,90 +570,6 @@ public class JournalTest {
     }
 
     @Test
-    public void testConcurrentWriteAndRead() throws Exception {
-        final AtomicInteger counter = new AtomicInteger(0);
-        ExecutorService executor = Executors.newFixedThreadPool(25);
-        int iterations = 1000;
-        //
-        for (int i = 0; i < iterations; i++) {
-            final int index = i;
-            executor.submit(new Runnable() {
-
-                public void run() {
-                    try {
-                        Journal.WriteType sync = index % 2 == 0 ? Journal.WriteType.SYNC : Journal.WriteType.ASYNC;
-                        String write = new String("DATA" + index);
-                        Location location = journal.write(write.getBytes("UTF-8"), sync);
-                        String read = new String(journal.read(location, Journal.ReadType.ASYNC), "UTF-8");
-                        if (read.equals("DATA" + index)) {
-                            counter.incrementAndGet();
-                        } else {
-                            System.out.println(write);
-                            System.out.println(read);
-                        }
-                    } catch (Exception ex) {
-                        ex.printStackTrace();
-                    }
-                }
-            });
-        }
-        executor.shutdown();
-        assertTrue(executor.awaitTermination(1, TimeUnit.MINUTES));
-        assertEquals(iterations, counter.get());
-    }
-
-    @Test
-    public void testCompactionDuringConcurrentWriteAndRead() throws Exception {
-        final AtomicInteger counter = new AtomicInteger(0);
-        ExecutorService executor = Executors.newFixedThreadPool(25);
-        int iterations = 1000;
-        //
-        for (int i = 0; i < iterations; i++) {
-            final int index = i;
-            executor.submit(new Runnable() {
-
-                public void run() {
-                    try {
-                        Journal.WriteType sync = index % 2 == 0 ? Journal.WriteType.SYNC : Journal.WriteType.ASYNC;
-                        String write = new String("DATA" + index);
-                        Location location = journal.write(write.getBytes("UTF-8"), sync);
-                        String read = new String(journal.read(location, Journal.ReadType.ASYNC), "UTF-8");
-                        if (read.equals("DATA" + index)) {
-                            if (index % 4 == 0) {
-                                journal.delete(location);
-                            }
-                            counter.incrementAndGet();
-                        } else {
-                            System.out.println(write);
-                            System.out.println(read);
-                        }
-                    } catch (Exception ex) {
-                        ex.printStackTrace();
-                    }
-                }
-            });
-        }
-        executor.submit(new Runnable() {
-
-            public void run() {
-                try {
-                    journal.compact();
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }
-        });
-        executor.shutdown();
-        assertTrue(executor.awaitTermination(1, TimeUnit.MINUTES));
-        assertEquals(iterations, counter.get());
-        int locations = 0;
-        for (Location current : journal.redo()) {
-            locations++;
-        }
-        assertEquals(iterations - (iterations / 4), locations);
-    }
-
-    @Test
     public void testOpenAndRecoveryWithNewJournalInstanceAfterLargeNumberOfWrites() throws Exception {
         int iterations = 100000;
         for (int i = 0; i < iterations; i++) {
@@ -733,7 +651,7 @@ public class JournalTest {
     }
 
     protected void configure(Journal journal) {
-        journal.setMaxFileLength(1024);
+        journal.setMaxFileLength(1024 * 100);
         journal.setMaxWriteBatchSize(1024);
     }
 

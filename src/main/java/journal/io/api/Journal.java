@@ -649,6 +649,15 @@ public class Journal {
     ConcurrentNavigableMap<Integer, DataFile> getDataFiles() {
         return dataFiles;
     }
+    
+    DataFile getDataFile(Integer id) throws CompactedDataFileException {
+        Entry<Integer, DataFile> first = dataFiles.firstEntry();
+        if (first != null && first.getKey() <= id) {
+            return dataFiles.get(id);
+        } else {
+            throw new CompactedDataFileException(id);
+        }
+    }
 
     ConcurrentNavigableMap<Location, WriteCommand> getInflightWrites() {
         return inflightWrites;
@@ -684,8 +693,12 @@ public class Journal {
         totalLength.addAndGet(size);
     }
 
-    private Location goToFirstLocation(DataFile file, byte type, boolean goToNextFile) throws IOException, IllegalStateException {
-        Location start = accessor.readLocationDetails(file.getDataFileId(), 0);
+    private Location goToFirstLocation(DataFile file, final byte type, final boolean goToNextFile) throws IOException, IllegalStateException {
+        Location start = null;
+        while (file != null && start == null) {
+            start = accessor.readLocationDetails(file.getDataFileId(), 0);
+            file = goToNextFile ? file.getNext() : null;
+        }
         if (start != null && (start.getType() == type || type == Location.ANY_RECORD_TYPE)) {
             return start;
         } else if (start != null) {
@@ -695,22 +708,13 @@ public class Journal {
         }
     }
 
-    private Location goToFirstLocationOnly(DataFile file, byte type) throws IOException, IllegalStateException {
-        Location start = accessor.readLocationDetails(file.getDataFileId(), 0);
-        if (start != null && (start.getType() == type || type == Location.ANY_RECORD_TYPE)) {
-            return start;
-        } else {
-            return null;
-        }
-    }
-
-    private Location goToNextLocation(Location start, byte type, boolean goToNextFile) throws IOException {
-        DataFile currentDataFile = getDataFile(start);
+    private Location goToNextLocation(Location start, final byte type, final boolean goToNextFile) throws IOException {
+        DataFile currentDataFile = dataFiles.get(start.getDataFileId());
         Location currentLocation = new Location(start);
         Location result = null;
         while (result == null) {
-            currentLocation = accessor.readNextLocationDetails(currentLocation, type);
             if (currentLocation != null) {
+                currentLocation = accessor.readNextLocationDetails(currentLocation, type);
                 result = currentLocation;
             } else {
                 if (goToNextFile) {
@@ -719,8 +723,6 @@ public class Journal {
                         currentLocation = accessor.readLocationDetails(currentDataFile.getDataFileId(), 0);
                         if (currentLocation != null && (currentLocation.getType() == type || type == Location.ANY_RECORD_TYPE)) {
                            result = currentLocation;
-                        } else if (currentLocation == null) {
-                            break;
                         }
                     } else {
                         break;
@@ -737,16 +739,6 @@ public class Journal {
         String fileName = filePrefix + nextNum + fileSuffix;
         File file = new File(directory, fileName);
         return file;
-    }
-
-    private DataFile getDataFile(Location item) throws IOException {
-        Integer key = Integer.valueOf(item.getDataFileId());
-        DataFile dataFile = dataFiles.get(key);
-        if (dataFile == null) {
-            error("Looking for key %d but not found among data files %s", key, dataFiles);
-            throw new IOException("Could not locate data file " + getFile(item.getDataFileId()));
-        }
-        return dataFile;
     }
 
     private void removeDataFile(DataFile dataFile) throws IOException {

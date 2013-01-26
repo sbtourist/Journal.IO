@@ -52,7 +52,7 @@ class DataFileAccessor {
         this.journal = journal;
     }
 
-    void updateLocation(Location location, byte type, boolean sync) throws IOException {
+    void updateLocation(Location location, byte type, boolean sync) throws CompactedDataFileException, IOException {
         Lock threadLock = getOrCreateLock(Thread.currentThread(), location.getDataFileId());
         accessorLock.lock();
         threadLock.lock();
@@ -61,8 +61,10 @@ class DataFileAccessor {
             //
             RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), location.getDataFileId());
             if (seekToLocation(raf, location)) {
-                raf.skipBytes(Journal.RECORD_POINTER_SIZE + Journal.RECORD_LENGTH_SIZE);
+                int ignoredPointer = raf.readInt();
+                int size = raf.readInt();
                 raf.write(type);
+                raf.skipBytes(size);
                 location.setType(type);
                 if (sync) {
                     IOHelper.sync(raf.getFD());
@@ -89,7 +91,7 @@ class DataFileAccessor {
         }
     }
 
-    Location readLocationDetails(int file, int pointer) throws IOException {
+    Location readLocationDetails(int file, int pointer) throws CompactedDataFileException, IOException {
         WriteCommand asyncWrite = journal.getInflightWrites().get(new Location(file, pointer));
         if (asyncWrite != null) {
             Location location = new Location(file, pointer);
@@ -121,6 +123,9 @@ class DataFileAccessor {
                 } else {
                     return null;
                 }
+            } catch (CompactedDataFileException ex) {
+                warn(ex.getMessage());
+                return null;
             } finally {
                 threadLock.unlock();
                 accessorLock.unlock();
@@ -128,7 +133,7 @@ class DataFileAccessor {
         }
     }
 
-    Location readNextLocationDetails(Location start, int type) throws IOException {
+    Location readNextLocationDetails(Location start, final int type) throws CompactedDataFileException, IOException {
         // Try with the most immediate subsequent location among inflight writes:
         Location asyncLocation = new Location(start.getDataFileId(), start.getPointer() + 1);
         WriteCommand asyncWrite = journal.getInflightWrites().get(asyncLocation);
@@ -174,6 +179,9 @@ class DataFileAccessor {
                 } else {
                     return null;
                 }
+            } catch (CompactedDataFileException ex) {
+                warn(ex.getMessage());
+                return null;
             } finally {
                 threadLock.unlock();
                 accessorLock.unlock();
@@ -279,7 +287,7 @@ class DataFileAccessor {
         }
     }
 
-    private RandomAccessFile getOrCreateRaf(Thread thread, Integer file) throws IOException {
+    private RandomAccessFile getOrCreateRaf(Thread thread, Integer file) throws CompactedDataFileException, IOException {
         ConcurrentMap<Integer, RandomAccessFile> rafs = perThreadDataFileRafs.get(thread);
         if (rafs == null) {
             rafs = new ConcurrentHashMap<Integer, RandomAccessFile>();
@@ -287,7 +295,7 @@ class DataFileAccessor {
         }
         RandomAccessFile raf = rafs.get(file);
         if (raf == null) {
-            raf = journal.getDataFiles().get(file).openRandomAccessFile();
+            raf = journal.getDataFile(file).openRandomAccessFile();
             rafs.put(file, raf);
         }
         return raf;
