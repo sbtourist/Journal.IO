@@ -178,6 +178,23 @@ public class JournalTest {
         }
         assertEquals(0, iterations);
     }
+    
+    @Test
+    public void testRedoJournalWithOnlyDeletedEntries() throws Exception {
+        int iterations = 10;
+        for (int i = 0; i < iterations; i++) {
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+        }
+        for (Location location : journal.redo()) {
+            journal.delete(location);
+        }
+        int found = 0;
+        for (Location loc : journal.redo()) {
+            found++;
+        }
+        assertEquals(0, found);
+    }
+    
 
     @Test
     public void testRedoLargeChunksOfData() throws Exception {

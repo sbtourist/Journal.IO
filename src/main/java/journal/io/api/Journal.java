@@ -157,13 +157,11 @@ public class Journal {
         appender.open();
 
         File[] files = directory.listFiles(new FilenameFilter() {
-
             public boolean accept(File dir, String n) {
                 return dir.equals(directory) && n.startsWith(filePrefix) && n.endsWith(fileSuffix);
             }
         });
         Arrays.sort(files, new Comparator<File>() {
-
             @Override
             public int compare(File f1, File f2) {
                 String name1 = f1.getName();
@@ -274,10 +272,8 @@ public class Journal {
     /**
      * Read the record stored at the given {@link Location}, either by syncing
      * with the disk state (if {@code ReadType.SYNC}) or by taking advantage of
-     * speculative disk
-     * reads (if {@code ReadType.ASYNC}); the latter is faster, while the former
-     * is slower but
-     * will suddenly detect deleted records.
+     * speculative disk reads (if {@code ReadType.ASYNC}); the latter is faster,
+     * while the former is slower but will suddenly detect deleted records.
      *
      * @param location
      * @param read
@@ -290,10 +286,10 @@ public class Journal {
     }
 
     /**
-     * Write the given byte buffer record, either sync (if {@code WriteType.SYNC})
-     * or async (if {@code WriteType.ASYNC}), and returns the
-     * stored {@link Location}.<br/> A sync write causes all previously batched
-     * async writes to be synced too.
+     * Write the given byte buffer record, either sync (if
+     * {@code WriteType.SYNC}) or async (if {@code WriteType.ASYNC}), and
+     * returns the stored {@link Location}.<br/> A sync write causes all
+     * previously batched async writes to be synced too.
      *
      * @param data
      * @param write
@@ -306,11 +302,12 @@ public class Journal {
     }
 
     /**
-     * Write the given byte buffer record, either sync (if {@code WriteType.SYNC})
-     * or async (if {@code WriteType.ASYNC}), and returns the
-     * stored {@link Location}.<br/> A sync write causes all previously batched
-     * async writes to be synced too.<br/> The provided callback will be invoked
-     * if sync is completed or if some error occurs during syncing.
+     * Write the given byte buffer record, either sync (if
+     * {@code WriteType.SYNC}) or async (if {@code WriteType.ASYNC}), and
+     * returns the stored {@link Location}.<br/> A sync write causes all
+     * previously batched async writes to be synced too.<br/> The provided
+     * callback will be invoked if sync is completed or if some error occurs
+     * during syncing.
      *
      * @param data
      * @param write
@@ -698,6 +695,15 @@ public class Journal {
         }
     }
 
+    private Location goToFirstLocationOnly(DataFile file, byte type) throws IOException, IllegalStateException {
+        Location start = accessor.readLocationDetails(file.getDataFileId(), 0);
+        if (start != null && (start.getType() == type || type == Location.ANY_RECORD_TYPE)) {
+            return start;
+        } else {
+            return null;
+        }
+    }
+
     private Location goToNextLocation(Location start, byte type, boolean goToNextFile) throws IOException {
         DataFile currentDataFile = getDataFile(start);
         Location currentLocation = new Location(start);
@@ -710,7 +716,12 @@ public class Journal {
                 if (goToNextFile) {
                     currentDataFile = currentDataFile.getNext();
                     if (currentDataFile != null) {
-                        result = goToFirstLocation(currentDataFile, type, true);
+                        currentLocation = accessor.readLocationDetails(currentDataFile.getDataFileId(), 0);
+                        if (currentLocation != null && (currentLocation.getType() == type || type == Location.ANY_RECORD_TYPE)) {
+                           result = currentLocation;
+                        } else if (currentLocation == null) {
+                            break;
+                        }
                     } else {
                         break;
                     }
@@ -1042,7 +1053,6 @@ public class Journal {
 
         public Iterator<Location> iterator() {
             return new Iterator<Location>() {
-
                 private Location current = null;
                 private Location next = start;
 
@@ -1112,7 +1122,6 @@ public class Journal {
         @Override
         public Iterator<Location> iterator() {
             return new Iterator<Location>() {
-
                 private int pointer = start;
                 private Object[] ref = stack;
                 private Location current;
