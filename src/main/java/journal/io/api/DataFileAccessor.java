@@ -1,15 +1,15 @@
 /**
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
  */
 package journal.io.api;
 
@@ -31,8 +31,9 @@ import journal.io.util.IOHelper;
 import static journal.io.util.LogHelper.*;
 
 /**
- * File reader/updater to randomly access data files, supporting concurrent thread-isolated reads and writes.
- * 
+ * File reader/updater to randomly access data files, supporting concurrent
+ * thread-isolated reads and writes.
+ *
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
  */
@@ -60,11 +61,11 @@ class DataFileAccessor {
             journal.sync();
             //
             RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), location.getDataFileId());
-            if (seekToLocation(raf, location)) {
-                int ignoredPointer = raf.readInt();
+            if (seekToLocation(raf, location, false)) {
+                int pointer = raf.readInt();
                 int size = raf.readInt();
                 raf.write(type);
-                raf.skipBytes(size);
+                IOHelper.skipBytes(raf, size - Journal.HEADER_SIZE);
                 location.setType(type);
                 if (sync) {
                     IOHelper.sync(raf.getFD());
@@ -86,7 +87,7 @@ class DataFileAccessor {
             if (read != null && !read.isDeletedRecord()) {
                 return read.getData();
             } else {
-                throw new IOException("Invalid location: " + location);
+                throw new IOException("Invalid location: " + location + ", found: " + read);
             }
         }
     }
@@ -107,17 +108,13 @@ class DataFileAccessor {
             threadLock.lock();
             try {
                 RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), location.getDataFileId());
-                if (seekToLocation(raf, location)) {
-                    long position = raf.getFilePointer();
-                    location.setPointer(raf.readInt());
-                    location.setSize(raf.readInt());
-                    location.setType(raf.readByte());
+                if (seekToLocation(raf, location, true)) {
                     if (location.getSize() > 0) {
                         location.setData(readLocationData(location, raf));
-                        raf.seek(position);
+                        location.setDataFileGeneration(journal.getDataFile(file).getDataFileGeneration());
+                        location.setNextFilePosition(raf.getFilePointer());
                         return location;
                     } else {
-                        raf.seek(position);
                         return null;
                     }
                 } else {
@@ -154,26 +151,26 @@ class DataFileAccessor {
             threadLock.lock();
             try {
                 RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), start.getDataFileId());
-                if (seekToLocation(raf, start) && skipToNextLocation(raf)) {
+                if (isIntoNextLocation(raf, start) || (seekToLocation(raf, start, true) && skipLocationData(raf, start))) {
                     Location next = new Location(start.getDataFileId());
-                    long position = 0;
                     do {
-                        position = raf.getFilePointer();
+                        next.setThisFilePosition(raf.getFilePointer());
                         next.setPointer(raf.readInt());
                         next.setSize(raf.readInt());
                         next.setType(raf.readByte());
                         if (type != Location.ANY_RECORD_TYPE && next.getType() != type) {
-                            raf.skipBytes(next.getSize() - Journal.HEADER_SIZE);
+                            IOHelper.skipBytes(raf, next.getSize() - Journal.HEADER_SIZE);
                         } else {
                             break;
                         }
                     } while (raf.length() - raf.getFilePointer() > Journal.HEADER_SIZE);
                     if (type == Location.ANY_RECORD_TYPE || next.getType() == type) {
                         next.setData(readLocationData(next, raf));
-                        raf.seek(position);
+                        next.setDataFileGeneration(journal.getDataFile(start.getDataFileId()).getDataFileGeneration());
+                        next.setNextFilePosition(raf.getFilePointer());
                         return next;
                     } else {
-                        raf.seek(position);
+                        raf.seek(0);
                         return null;
                     }
                 } else {
@@ -224,30 +221,46 @@ class DataFileAccessor {
     void resume() {
         compactorMutex.unlock();
     }
+    
+    private boolean isIntoNextLocation(RandomAccessFile raf, Location source) throws IOException {
+        int generation = journal.getDataFile(source.getDataFileId()).getDataFileGeneration();
+        long position = raf.getFilePointer();
+        return source.getDataFileGeneration() == generation
+                && source.getNextFilePosition() == position
+                && raf.length() - position > Journal.HEADER_SIZE;
+    }
 
-    private boolean seekToLocation(RandomAccessFile raf, Location destination) throws IOException {
+    private boolean seekToLocation(RandomAccessFile raf, Location destination, boolean fillLocation) throws IOException {
         // First try the next file position:
         long position = raf.getFilePointer();
         int pointer = -1;
         int length = -1;
-        int type = -1;
+        byte type = -1;
         if (raf.length() - position > Journal.HEADER_SIZE) {
             pointer = raf.readInt();
             length = raf.readInt();
             type = raf.readByte();
         }
-        // Else seek from beginning:
-        if (pointer != destination.getPointer() || type != destination.getType()) {
-            raf.seek(0);
-            position = raf.getFilePointer();
+        // Else seek:
+        if (pointer != destination.getPointer()) {
+            Entry<Location, Long> hint = journal.getHints().lowerEntry(destination);
+            if (hint != null && hint.getKey().getDataFileId() == destination.getDataFileId()) {
+                position = hint.getValue();
+            } else {
+                position = 0;
+            }
+            raf.seek(position);
             if (raf.length() - position > Journal.HEADER_SIZE) {
                 pointer = raf.readInt();
+                length = raf.readInt();
+                type = raf.readByte();
                 while (pointer != destination.getPointer()) {
-                    length = raf.readInt();
-                    raf.skipBytes(length - Journal.RECORD_POINTER_SIZE - Journal.RECORD_LENGTH_SIZE);
+                    IOHelper.skipBytes(raf, length - Journal.HEADER_SIZE);
                     position = raf.getFilePointer();
                     if (raf.length() - position > Journal.HEADER_SIZE) {
                         pointer = raf.readInt();
+                        length = raf.readInt();
+                        type = raf.readByte();
                     } else {
                         return false;
                     }
@@ -256,14 +269,20 @@ class DataFileAccessor {
                 return false;
             }
         }
-        raf.seek(position);
+        if (fillLocation) {
+            destination.setThisFilePosition(position);
+            destination.setSize(length);
+            destination.setType(type);
+        } else {
+            raf.seek(position);
+        }
         return true;
     }
 
-    private boolean skipToNextLocation(RandomAccessFile raf) throws IOException {
-        if (raf.length() - raf.getFilePointer() > Journal.HEADER_SIZE) {
-            raf.skipBytes(Journal.RECORD_POINTER_SIZE);
-            raf.skipBytes(raf.readInt() - Journal.RECORD_POINTER_SIZE - Journal.RECORD_LENGTH_SIZE);
+    private boolean skipLocationData(RandomAccessFile raf, Location source) throws IOException {
+        int toSkip = source.getSize() - Journal.HEADER_SIZE;
+        if (raf.length() - raf.getFilePointer() > toSkip) {
+            IOHelper.skipBytes(raf, toSkip);
             if (raf.length() - raf.getFilePointer() > Journal.HEADER_SIZE) {
                 return true;
             } else {
@@ -276,10 +295,9 @@ class DataFileAccessor {
 
     private byte[] readLocationData(Location location, RandomAccessFile raf) throws IOException {
         if (location.isBatchControlRecord()) {
-            int batchSize = raf.readInt();
-            byte[] data = new byte[Journal.CHECKSUM_SIZE + batchSize];
-            raf.readFully(data);
-            return data;
+            byte[] checksum = new byte[Journal.CHECKSUM_SIZE];
+            raf.read(checksum);
+            return checksum;
         } else {
             byte[] data = new byte[location.getSize() - Journal.HEADER_SIZE];
             raf.readFully(data);
@@ -346,6 +364,5 @@ class DataFileAccessor {
                 perThreadDataFileLocks.remove(deadThread);
             }
         }
-
     }
 }

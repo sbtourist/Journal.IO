@@ -67,9 +67,8 @@ public class Journal {
     static final int TYPE_SIZE = 1;
     static final int HEADER_SIZE = RECORD_POINTER_SIZE + RECORD_LENGTH_SIZE + TYPE_SIZE;
     //
-    static final int BATCH_SIZE = 4;
     static final int CHECKSUM_SIZE = 8;
-    static final int BATCH_CONTROL_RECORD_SIZE = HEADER_SIZE + BATCH_SIZE + CHECKSUM_SIZE;
+    static final int BATCH_CONTROL_RECORD_SIZE = HEADER_SIZE + CHECKSUM_SIZE;
     //
     static final String WRITER_THREAD_GROUP = "Journal.IO - Writer Thread Group";
     static final String WRITER_THREAD = "Journal.IO - Writer Thread";
@@ -88,6 +87,7 @@ public class Journal {
     static final int DEFAULT_MAX_BATCH_SIZE = DEFAULT_MAX_FILE_LENGTH;
     //
     private final ConcurrentNavigableMap<Integer, DataFile> dataFiles = new ConcurrentSkipListMap<Integer, DataFile>();
+    private final ConcurrentNavigableMap<Location, Long> hints = new ConcurrentSkipListMap<Location, Long>();
     private final ConcurrentNavigableMap<Location, WriteCommand> inflightWrites = new ConcurrentSkipListMap<Location, WriteCommand>();
     private final AtomicLong totalLength = new AtomicLong();
     //
@@ -221,7 +221,7 @@ public class Journal {
 
     /**
      * Compact the journal, reducing size of logs containing deleted entries and
-     * completely removing completely empty (with only deleted entries) logs.
+     * completely removing empty (with only deleted entries) logs.
      *
      * @throws IOException
      */
@@ -659,6 +659,10 @@ public class Journal {
         }
     }
 
+    ConcurrentNavigableMap<Location, Long> getHints() {
+        return hints;
+    }
+
     ConcurrentNavigableMap<Location, WriteCommand> getInflightWrites() {
         return inflightWrites;
     }
@@ -744,6 +748,11 @@ public class Journal {
     private void removeDataFile(DataFile dataFile) throws IOException {
         dataFiles.remove(dataFile.getDataFileId());
         totalLength.addAndGet(-dataFile.getLength());
+        Location toRemove = new Location(dataFile.getDataFileId());
+        Location candidate = null;
+        while ((candidate = hints.higherKey(toRemove)) != null && candidate.getDataFileId() == toRemove.getDataFileId()) {
+            hints.remove(candidate);
+        }
         if (archiveFiles) {
             dataFile.move(getDirectoryArchive());
         } else {
@@ -769,7 +778,8 @@ public class Journal {
                 batch.appendBatch(write);
                 currentUserLocation = goToNextLocation(currentUserLocation, Location.USER_RECORD_TYPE, false);
             }
-            batch.perform(raf, true, true, null);
+            Location batchLocation = batch.perform(raf, true, true, null);
+            hints.put(batchLocation, batchLocation.getThisFilePosition());
         } finally {
             if (raf != null) {
                 raf.close();
@@ -780,6 +790,9 @@ public class Journal {
         totalLength.addAndGet(tmpFile.getLength());
         IOHelper.copyFile(tmpFile.getFile(), currentFile.getFile());
         IOHelper.deleteFile(tmpFile.getFile());
+        // Increment generation so that sequential reads from locations
+        // referring to a different generation will not be valid:
+        currentFile.incrementGeneration();
     }
 
     private Location recoveryCheck() throws IOException {
@@ -787,6 +800,7 @@ public class Journal {
         Location currentBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
         Location lastBatch = currentBatch;
         while (currentBatch != null) {
+            hints.put(currentBatch, currentBatch.getThisFilePosition());
             if (isChecksum()) {
                 ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
                 Checksum actualChecksum = new Adler32();
@@ -885,7 +899,7 @@ public class Journal {
             writes.offer(writeRecord);
         }
 
-        void perform(RandomAccessFile file, boolean checksum, boolean physicalSync, ReplicationTarget replicationTarget) throws IOException {
+        Location perform(RandomAccessFile file, boolean checksum, boolean physicalSync, ReplicationTarget replicationTarget) throws IOException {
             ByteBuffer buffer = ByteBuffer.allocate(size);
             Checksum adler32 = new Adler32();
             WriteCommand control = writes.peek();
@@ -894,7 +908,6 @@ public class Journal {
             buffer.putInt(control.location.getPointer());
             buffer.putInt(BATCH_CONTROL_RECORD_SIZE);
             buffer.put(Location.BATCH_CONTROL_RECORD_TYPE);
-            buffer.putInt(0);
             buffer.putLong(0);
 
             Iterator<WriteCommand> commands = writes.iterator();
@@ -914,7 +927,6 @@ public class Journal {
 
             // Now we can fill in the batch control record properly.
             buffer.position(Journal.HEADER_SIZE);
-            buffer.putInt(size - Journal.BATCH_CONTROL_RECORD_SIZE);
             if (checksum) {
                 buffer.putLong(adler32.getValue());
             }
@@ -936,6 +948,9 @@ public class Journal {
             } catch (Throwable ex) {
                 warn("Cannot replicate!", ex);
             }
+            
+            control.location.setThisFilePosition(offset);
+            return control.location;
         }
 
         DataFile getDataFile() {

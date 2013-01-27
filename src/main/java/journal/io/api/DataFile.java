@@ -21,17 +21,20 @@ import journal.io.util.IOHelper;
 
 /**
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
+ * @author Sergio Bossa
  */
 class DataFile implements Comparable<DataFile> {
 
     private final File file;
     private final Integer dataFileId;
+    private volatile Integer dataFileGeneration;
     private final AtomicInteger length;
     private volatile DataFile next;
 
-    DataFile(File file, int number) {
+    DataFile(File file, int id) {
         this.file = file;
-        this.dataFileId = Integer.valueOf(number);
+        this.dataFileId = id;
+        this.dataFileGeneration = 0;
         this.length = new AtomicInteger((int) (file.exists() ? file.length() : 0));
     }
 
@@ -41,6 +44,14 @@ class DataFile implements Comparable<DataFile> {
 
     Integer getDataFileId() {
         return dataFileId;
+    }
+
+    Integer getDataFileGeneration() {
+        return dataFileGeneration;
+    }
+    
+    void incrementGeneration() {
+        this.dataFileGeneration++;
     }
 
     DataFile getNext() {
@@ -96,6 +107,6 @@ class DataFile implements Comparable<DataFile> {
 
     @Override
     public String toString() {
-        return file.getName() + " number = " + dataFileId + " , length = " + length;
+        return file.getName() + ", number = " + dataFileId + ", generation = " + dataFileGeneration + ", length = " + length;
     }
 }

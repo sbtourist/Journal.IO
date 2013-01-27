@@ -255,7 +255,10 @@ class DataFileAppender {
                             }
 
                             // Perform batch:
-                            wb.perform(lastAppendRaf, journal.isChecksum(), journal.isPhysicalSync(), journal.getReplicationTarget());
+                            Location batchLocation = wb.perform(lastAppendRaf, journal.isChecksum(), journal.isPhysicalSync(), journal.getReplicationTarget());
+                            
+                            // Add batch location as hint:
+                            journal.getHints().put(batchLocation, batchLocation.getThisFilePosition());
 
                             // Adjust journal length:
                             journal.addToTotalLength(wb.getSize());

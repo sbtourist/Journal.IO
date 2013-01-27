@@ -33,10 +33,20 @@ public final class Location implements Comparable<Location> {
     //
     static final int NOT_SET = -1;
     //
+    // The data file id this location refers to:
     private volatile int dataFileId = NOT_SET;
+    // The data file generation this location refers to 
+    // (used to check if a file has been compacted since the location has been read):
+    private volatile int dataFileGeneration = NOT_SET;
+    // Position in the file of this location:
+    private volatile long thisFilePosition = NOT_SET;
+    // Position in the file of next location:
+    private volatile long nextFilePosition = NOT_SET;
+    // Intra-file poiner, total location size and type:
     private volatile int pointer = NOT_SET;
     private volatile int size = NOT_SET;
     private volatile byte type = ANY_RECORD_TYPE;
+    //
     private volatile WriteCallback writeCallback = NoWriteCallback.INSTANCE;
     private volatile byte[] data;
     private volatile CountDownLatch latch;
@@ -44,11 +54,14 @@ public final class Location implements Comparable<Location> {
     public Location() {
     }
 
-    public Location(Location item) {
-        this.dataFileId = item.dataFileId;
-        this.pointer = item.pointer;
-        this.size = item.size;
-        this.type = item.type;
+    public Location(Location source) {
+        this.dataFileId = source.dataFileId;
+        this.dataFileGeneration = source.dataFileGeneration;
+        this.thisFilePosition = source.thisFilePosition;
+        this.nextFilePosition = source.nextFilePosition;
+        this.pointer = source.pointer;
+        this.size = source.size;
+        this.type = source.type;
     }
 
     public Location(int dataFileId) {
@@ -128,12 +141,39 @@ public final class Location implements Comparable<Location> {
         this.data = data;
     }
 
+    long getThisFilePosition() {
+        return thisFilePosition;
+    }
+
+    void setThisFilePosition(long thisFilePosition) {
+        this.thisFilePosition = thisFilePosition;
+    }
+
+    long getNextFilePosition() {
+        return nextFilePosition;
+    }
+
+    void setNextFilePosition(long nextFilePosition) {
+        this.nextFilePosition = nextFilePosition;
+    }
+
+    void setDataFileGeneration(int dataFileGeneration) {
+        this.dataFileGeneration = dataFileGeneration;
+    }
+
+    int getDataFileGeneration() {
+        return dataFileGeneration;
+    }
+
     public String toString() {
-        return dataFileId + ":" + pointer;
+        return dataFileId + ":" + pointer + ":" + type;
     }
 
     public void writeExternal(DataOutput dos) throws IOException {
         dos.writeInt(dataFileId);
+        dos.writeInt(dataFileGeneration);
+        dos.writeLong(thisFilePosition);
+        dos.writeLong(nextFilePosition);
         dos.writeInt(pointer);
         dos.writeInt(size);
         dos.writeByte(type);
@@ -141,18 +181,20 @@ public final class Location implements Comparable<Location> {
 
     public void readExternal(DataInput dis) throws IOException {
         dataFileId = dis.readInt();
+        dataFileGeneration = dis.readInt();
+        thisFilePosition = dis.readLong();
+        nextFilePosition = dis.readLong();
         pointer = dis.readInt();
         size = dis.readInt();
         type = dis.readByte();
     }
 
     public int compareTo(Location o) {
-        Location l = o;
-        if (dataFileId == l.dataFileId) {
-            int rc = pointer - l.pointer;
+        if (dataFileId == o.dataFileId) {
+            int rc = pointer - o.pointer;
             return rc;
         }
-        return dataFileId - l.dataFileId;
+        return dataFileId - o.dataFileId;
     }
 
     public boolean equals(Object o) {

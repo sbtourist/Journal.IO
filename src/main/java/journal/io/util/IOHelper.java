@@ -13,6 +13,8 @@
  */
 package journal.io.util;
 
+import java.io.DataInput;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -20,6 +22,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 
 /**
  * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
@@ -95,6 +98,17 @@ public final class IOHelper {
 
     public static void sync(FileDescriptor fd) throws IOException {
         IO_STRATEGY.sync(fd);
+    }
+    
+    public static void skipBytes(RandomAccessFile raf, int bytes) throws IOException {
+        int n = 0;
+        while (n < bytes) {
+            int skipped = raf.skipBytes(bytes - n);
+            if (skipped == 0 && raf.getFilePointer() >= raf.length()) {
+                throw new EOFException();
+            }
+            n += skipped;
+        }
     }
 
     static {

@@ -14,10 +14,14 @@
 package journal.io.api;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
+import static org.junit.Assert.*;
+import org.junit.Ignore;
 
 /**
  * @author Sergio Bossa
@@ -39,6 +43,14 @@ public class JournalPerformanceTest {
         journal = new Journal();
         journal.setDirectory(dir);
         configure(journal);
+        //
+        journal.open();
+        for (int i = 0; i < 1000; i++) {
+            journal.write(new byte[1], Journal.WriteType.ASYNC);
+        }
+        journal.close();
+        deleteFilesInDirectory(dir);
+        //
         journal.open();
     }
 
@@ -62,7 +74,7 @@ public class JournalPerformanceTest {
         //
         System.out.println("Time in millis: " + (System.currentTimeMillis() - start));
     }
-    
+
     @Test
     public void testAsyncPerf() throws Exception {
         long start = System.currentTimeMillis();
@@ -77,9 +89,48 @@ public class JournalPerformanceTest {
         System.out.println("Time in millis: " + (System.currentTimeMillis() - start));
     }
 
+    @Test
+    public void testSequentialReadPerf() throws Exception {
+        int iterations = 1000000;
+        for (int i = 0; i < iterations; i++) {
+            journal.write(new String("" + i).getBytes("UTF-8"), Journal.WriteType.ASYNC);
+        }
+        //
+        long start = System.currentTimeMillis();
+        int i = 0;
+        for (Location current : journal.redo()) {
+            assertEquals("" + i++, new String(journal.read(current, Journal.ReadType.ASYNC), "UTF-8"));
+        }
+        //
+        journal.close();
+        //
+        System.out.println("Time in millis: " + (System.currentTimeMillis() - start));
+    }
+    
+    @Test
+    public void testRandomReadPerf() throws Exception {
+        int iterations = 1000000;
+        List<Location> locations = new ArrayList<Location>();
+        for (int i = 0; i < iterations; i++) {
+            locations.add(journal.write(new String("" + i).getBytes("UTF-8"), Journal.WriteType.ASYNC));
+        }
+        //
+        Random generator = new Random();
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < 1000; i++) {
+            int n = generator.nextInt(iterations);
+            Location read = locations.get(n);
+            assertEquals("" + n, new String(journal.read(read, Journal.ReadType.ASYNC), "UTF-8"));
+        }
+        //
+        journal.close();
+        //
+        System.out.println("Time in millis: " + (System.currentTimeMillis() - start));
+    }
+
     protected void configure(Journal journal) {
         journal.setMaxFileLength(1024 * 1024 * 32);
-        journal.setMaxWriteBatchSize(1024 * 1024);
+        journal.setMaxWriteBatchSize(1024 * 100);
     }
 
     private void deleteFilesInDirectory(File directory) {
