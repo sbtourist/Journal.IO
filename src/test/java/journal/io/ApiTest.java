@@ -11,9 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package journal.io.api;
+package journal.io;
 
 import java.io.File;
+import journal.io.api.Journal;
+import journal.io.api.Location;
 import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -25,6 +27,13 @@ public class ApiTest {
 
     private static File JOURNAL_DIR;
 
+    @Before
+    public void setUp() throws Exception {
+        JOURNAL_DIR = File.createTempFile("ApiTest", "journal", null);
+        JOURNAL_DIR.delete();
+        JOURNAL_DIR.mkdir();
+    }
+    
     @Test
     public void api() throws Exception {
         // Create journal and configure some settings:
@@ -58,15 +67,16 @@ public class ApiTest {
             byte[] record = journal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + --i, new String(record, "UTF-8"));
         }
+        
+        // Delete locations:
+        for (Location location : journal.redo()) {
+            journal.delete(location);
+        }
+        
+        // Compact logs:
+        journal.compact();
 
         // Close the journal:
         journal.close();
-    }
-
-    @Before
-    public void setUp() throws Exception {
-        JOURNAL_DIR = File.createTempFile("journal", "dir", null);
-        JOURNAL_DIR.delete();
-        JOURNAL_DIR.mkdir();
     }
 }

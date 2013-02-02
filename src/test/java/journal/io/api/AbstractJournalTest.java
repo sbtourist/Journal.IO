@@ -11,7 +11,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package journal.io;
+package journal.io.api;
 
 import java.io.File;
 import journal.io.api.Journal;
@@ -20,11 +20,12 @@ import org.junit.Before;
 
 /**
  * @author Sergio Bossa
+ * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  */
 public abstract class AbstractJournalTest {
 
     protected Journal journal;
-    private File dir;
+    protected File dir;
 
     @Before
     public void setUp() throws Exception {
@@ -38,6 +39,7 @@ public abstract class AbstractJournalTest {
         journal.setDirectory(dir);
         configure(journal);
         journal.open();
+        postSetUp();
     }
 
     @After
@@ -50,6 +52,9 @@ public abstract class AbstractJournalTest {
     protected void configure(Journal journal) {
         journal.setMaxFileLength(1024);
         journal.setMaxWriteBatchSize(1024);
+    }
+
+    protected void postSetUp() {
     }
 
     protected final void deleteFilesInDirectory(File directory) {

@@ -11,12 +11,14 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package journal.io.api;
+package journal.io;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import journal.io.api.Journal;
+import journal.io.api.Location;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -26,11 +28,11 @@ import org.junit.Ignore;
 /**
  * @author Sergio Bossa
  */
-@Ignore
-public class JournalPerformanceTest {
+@Ignore("Takes a long time, so disabled by default.")
+public class PerformanceTest {
 
-    private Journal journal;
-    private File dir;
+    private volatile Journal journal;
+    private volatile File dir;
 
     @Before
     public void setUp() throws Exception {
@@ -45,10 +47,13 @@ public class JournalPerformanceTest {
         configure(journal);
         //
         journal.open();
+        // Make some writes to warmup:
         for (int i = 0; i < 1000; i++) {
             journal.write(new byte[1], Journal.WriteType.ASYNC);
         }
+        //
         journal.close();
+        //
         deleteFilesInDirectory(dir);
         //
         journal.open();

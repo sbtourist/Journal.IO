@@ -15,15 +15,13 @@ package journal.io.api;
 
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import journal.io.AbstractJournalTest;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
 /**
- * @author <a href="http://hiramchirino.com">Hiram Chirino</a>
  * @author Sergio Bossa
  */
-public class JournalConcurrencyTest extends AbstractJournalTest {
+public class ConcurrencyTest extends AbstractJournalTest {
 
     @Test
     public void testConcurrentWriteAndRead() throws Exception {
