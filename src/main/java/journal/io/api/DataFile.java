@@ -16,6 +16,7 @@ package journal.io.api;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import journal.io.util.IOHelper;
 
@@ -84,6 +85,34 @@ class DataFile implements Comparable<DataFile> {
 
     void move(File targetDirectory) throws IOException {
         IOHelper.moveFile(file, targetDirectory);
+    }
+    
+    void writeHeader() throws IOException {
+        RandomAccessFile raf = openRandomAccessFile();
+        try {
+            raf.write(Journal.MAGIC_STRING);
+            raf.writeInt(Journal.STORAGE_VERSION);
+            length.set(Journal.FILE_HEADER_SIZE);
+        } finally {
+            raf.close();
+        }
+    }
+    
+    void verifyHeader() throws IOException {
+        RandomAccessFile raf = openRandomAccessFile();
+        try {
+            byte[] magic = new byte[Journal.MAGIC_SIZE];
+            if (raf.read(magic) == Journal.MAGIC_SIZE && Arrays.equals(magic, Journal.MAGIC_STRING)) {
+                int version = raf.readInt();
+                if (version != Journal.STORAGE_VERSION) {
+                    throw new IOException("Incompatible storage version, found: " + version + ", required: " + Journal.STORAGE_VERSION);
+                }
+            } else {
+                throw new IOException("Incompatible magic string!");
+            }
+        } finally {
+            raf.close();
+        }
     }
 
     @Override

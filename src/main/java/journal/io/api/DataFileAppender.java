@@ -56,7 +56,7 @@ class DataFileAppender {
     }
 
     Location storeItem(byte[] data, byte type, boolean sync, WriteCallback callback) throws IOException {
-        int size = Journal.HEADER_SIZE + data.length;
+        int size = Journal.RECORD_HEADER_SIZE + data.length;
 
         Location location = new Location();
         location.setSize(size);
@@ -128,12 +128,12 @@ class DataFileAppender {
                     boolean hasNewBatch = false;
                     try {
                         if (nextWriteBatch == null) {
-                            DataFile file = journal.getCurrentWriteFile();
+                            DataFile file = journal.getCurrentWriteDataFile();
                             boolean canBatch = false;
                             currentBatch = new WriteBatch(file, journal.getLastAppendLocation().getPointer() + 1);
                             canBatch = currentBatch.canBatch(writeRecord, journal.getMaxWriteBatchSize(), journal.getMaxFileLength());
                             if (!canBatch) {
-                                file = journal.rotateWriteFile();
+                                file = journal.newDataFile();
                                 currentBatch = new WriteBatch(file, 0);
                             }
                             WriteCommand controlRecord = currentBatch.prepareBatch();

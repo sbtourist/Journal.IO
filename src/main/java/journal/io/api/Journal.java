@@ -18,6 +18,7 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -62,13 +63,19 @@ import static journal.io.util.LogHelper.*;
  */
 public class Journal {
 
+    static final byte[] MAGIC_STRING = "J.IO".getBytes(Charset.forName("UTF-8"));
+    static  final int MAGIC_SIZE = MAGIC_STRING.length;
+    static final int STORAGE_VERSION = 130;
+    static final int STORAGE_VERSION_SIZE = 4;
+    static final int FILE_HEADER_SIZE = MAGIC_SIZE + STORAGE_VERSION_SIZE;
+    
     static final int RECORD_POINTER_SIZE = 4;
     static final int RECORD_LENGTH_SIZE = 4;
-    static final int TYPE_SIZE = 1;
-    static final int HEADER_SIZE = RECORD_POINTER_SIZE + RECORD_LENGTH_SIZE + TYPE_SIZE;
+    static final int RECORD_TYPE_SIZE = 1;
+    static final int RECORD_HEADER_SIZE = RECORD_POINTER_SIZE + RECORD_LENGTH_SIZE + RECORD_TYPE_SIZE;
     //
     static final int CHECKSUM_SIZE = 8;
-    static final int BATCH_CONTROL_RECORD_SIZE = HEADER_SIZE + CHECKSUM_SIZE;
+    static final int BATCH_CONTROL_RECORD_SIZE = RECORD_HEADER_SIZE + CHECKSUM_SIZE;
     //
     static final String WRITER_THREAD_GROUP = "Journal.IO - Writer Thread Group";
     static final String WRITER_THREAD = "Journal.IO - Writer Thread";
@@ -178,6 +185,7 @@ public class Journal {
                     String name = file.getName();
                     int index = Integer.parseInt(name.substring(filePrefix.length(), name.length() - fileSuffix.length()));
                     DataFile dataFile = new DataFile(file, index);
+                    dataFile.verifyHeader();
                     if (!dataFiles.isEmpty()) {
                         dataFiles.lastEntry().getValue().setNext(dataFile);
                     }
@@ -667,17 +675,18 @@ public class Journal {
         return inflightWrites;
     }
 
-    DataFile getCurrentWriteFile() throws IOException {
+    DataFile getCurrentWriteDataFile() throws IOException {
         if (dataFiles.isEmpty()) {
-            rotateWriteFile();
+            newDataFile();
         }
         return dataFiles.lastEntry().getValue();
     }
 
-    DataFile rotateWriteFile() {
+    DataFile newDataFile() throws IOException {
         int nextNum = !dataFiles.isEmpty() ? dataFiles.lastEntry().getValue().getDataFileId().intValue() + 1 : 1;
         File file = getFile(nextNum);
         DataFile nextWriteFile = new DataFile(file, nextNum);
+        nextWriteFile.writeHeader();
         if (!dataFiles.isEmpty()) {
             dataFiles.lastEntry().getValue().setNext(nextWriteFile);
         }
@@ -767,6 +776,7 @@ public class Journal {
         DataFile tmpFile = new DataFile(
                 new File(currentFile.getFile().getParent(), filePrefix + currentFile.getDataFileId() + ".tmp" + fileSuffix),
                 currentFile.getDataFileId());
+        tmpFile.writeHeader();
         RandomAccessFile raf = tmpFile.openRandomAccessFile();
         try {
             Location currentUserLocation = firstUserLocation;
@@ -926,7 +936,7 @@ public class Journal {
             }
 
             // Now we can fill in the batch control record properly.
-            buffer.position(Journal.HEADER_SIZE);
+            buffer.position(Journal.RECORD_HEADER_SIZE);
             if (checksum) {
                 buffer.putLong(adler32.getValue());
             }
