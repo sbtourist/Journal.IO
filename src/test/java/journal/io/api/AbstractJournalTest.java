@@ -17,6 +17,7 @@ import java.io.File;
 import journal.io.api.Journal;
 import org.junit.After;
 import org.junit.Before;
+import static org.junit.Assert.*;
 
 /**
  * @author Sergio Bossa
@@ -46,7 +47,9 @@ public abstract class AbstractJournalTest {
     public void tearDown() throws Exception {
         journal.close();
         deleteFilesInDirectory(dir);
-        dir.delete();
+        if (!dir.delete()) {
+            fail("Failed to delete: " + dir.getName());
+        }
     }
 
     protected void configure(Journal journal) {
@@ -55,6 +58,7 @@ public abstract class AbstractJournalTest {
     }
 
     protected void postSetUp() {
+        // stub
     }
 
     protected final void deleteFilesInDirectory(File directory) {
@@ -65,7 +69,9 @@ public abstract class AbstractJournalTest {
                 if (f.isDirectory()) {
                     deleteFilesInDirectory(f);
                 }
-                f.delete();
+                if (!f.delete()) {
+                    fail("Failed to delete: " + f.getName());
+                }
             }
         }
     }
