@@ -192,6 +192,7 @@ class DataFileAccessor {
             for (Entry<Integer, RandomAccessFile> raf : threadRafs.getValue().entrySet()) {
                 if (raf.getKey().equals(dataFileId)) {
                     dispose(threadRafs.getKey(), dataFileId);
+                    break;
                 }
             }
         }
