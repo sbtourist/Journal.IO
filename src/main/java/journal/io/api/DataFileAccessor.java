@@ -187,21 +187,26 @@ class DataFileAccessor {
     }
 
     void dispose(DataFile dataFile) {
+        Integer dataFileId = dataFile.getDataFileId();
         for (Entry<Thread, ConcurrentMap<Integer, RandomAccessFile>> threadRafs : perThreadDataFileRafs.entrySet()) {
             for (Entry<Integer, RandomAccessFile> raf : threadRafs.getValue().entrySet()) {
-                if (raf.getKey().equals(dataFile.getDataFileId())) {
-                    Lock lock = getOrCreateLock(threadRafs.getKey(), raf.getKey());
-                    lock.lock();
-                    try {
-                        removeRaf(threadRafs.getKey(), raf.getKey());
-                        return;
-                    } catch (IOException ex) {
-                        warn(ex, ex.getMessage());
-                    } finally {
-                        lock.unlock();
-                    }
+                if (raf.getKey().equals(dataFileId)) {
+                    dispose(threadRafs.getKey(), dataFileId);
+                    break;
                 }
             }
+        }
+    }
+
+    private void dispose(Thread t, Integer dataFileId) {
+        Lock lock = getOrCreateLock(t, dataFileId);
+        lock.lock();
+        try {
+            removeRaf(t, dataFileId);
+        } catch (IOException ex) {
+            warn(ex, ex.getMessage());
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -211,7 +216,11 @@ class DataFileAccessor {
     }
 
     void close() {
-        // No-op as of now...
+        for (Entry<Thread, ConcurrentMap<Integer, RandomAccessFile>> threadRafs : perThreadDataFileRafs.entrySet()) {
+            for (Entry<Integer, RandomAccessFile> raf : threadRafs.getValue().entrySet()) {
+                dispose(threadRafs.getKey(), raf.getKey());
+            }
+        }
     }
 
     void pause() {
