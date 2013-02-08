@@ -64,11 +64,11 @@ import static journal.io.util.LogHelper.*;
 public class Journal {
 
     static final byte[] MAGIC_STRING = "J.IO".getBytes(Charset.forName("UTF-8"));
-    static  final int MAGIC_SIZE = MAGIC_STRING.length;
+    static final int MAGIC_SIZE = MAGIC_STRING.length;
     static final int STORAGE_VERSION = 130;
     static final int STORAGE_VERSION_SIZE = 4;
     static final int FILE_HEADER_SIZE = MAGIC_SIZE + STORAGE_VERSION_SIZE;
-    
+    //
     static final int RECORD_POINTER_SIZE = 4;
     static final int RECORD_LENGTH_SIZE = 4;
     static final int RECORD_TYPE_SIZE = 1;
@@ -163,6 +163,8 @@ public class Journal {
         appender = new DataFileAppender(this);
         appender.open();
 
+        dataFiles.clear();
+
         File[] files = directory.listFiles(new FilenameFilter() {
             public boolean accept(File dir, String n) {
                 return dir.equals(directory) && n.startsWith(filePrefix) && n.endsWith(fileSuffix);
@@ -214,7 +216,6 @@ public class Journal {
         opened = false;
         accessor.close();
         appender.close();
-        dataFiles.clear();
         inflightWrites.clear();
         //
         if (managedWriter) {
@@ -232,11 +233,10 @@ public class Journal {
      * completely removing empty (with only deleted entries) logs.
      *
      * @throws IOException
+     * @throws ClosedJournalException
      */
-    public synchronized void compact() throws IOException {
-        if (!opened) {
-            return;
-        } else {
+    public synchronized void compact() throws ClosedJournalException, IOException {
+        if (opened) {
             accessor.pause();
             try {
                 for (DataFile file : dataFiles.values()) {
@@ -258,6 +258,8 @@ public class Journal {
             } finally {
                 accessor.resume();
             }
+        } else {
+            throw new ClosedJournalException("The journal is closed!");
         }
     }
 
@@ -265,8 +267,9 @@ public class Journal {
      * Sync asynchronously written records on disk.
      *
      * @throws IOException
+     * @throws ClosedJournalException
      */
-    public void sync() throws IOException {
+    public void sync() throws ClosedJournalException, IOException {
         try {
             appender.sync().get();
             if (appender.getAsyncException() != null) {
@@ -287,9 +290,10 @@ public class Journal {
      * @param read
      * @return
      * @throws IOException
-     * @throws IllegalStateException
+     * @throws ClosedJournalException
+     * @throws CompactedDataFileException
      */
-    public byte[] read(Location location, ReadType read) throws IOException, IllegalStateException {
+    public byte[] read(Location location, ReadType read) throws ClosedJournalException, CompactedDataFileException, IOException {
         return accessor.readLocation(location, read.equals(ReadType.SYNC) ? true : false);
     }
 
@@ -303,9 +307,9 @@ public class Journal {
      * @param write
      * @return
      * @throws IOException
-     * @throws IllegalStateException
+     * @throws ClosedJournalException
      */
-    public Location write(byte[] data, WriteType write) throws IOException, IllegalStateException {
+    public Location write(byte[] data, WriteType write) throws ClosedJournalException, IOException {
         return write(data, write, Location.NoWriteCallback.INSTANCE);
     }
 
@@ -322,9 +326,9 @@ public class Journal {
      * @param callback
      * @return
      * @throws IOException
-     * @throws IllegalStateException
+     * @throws ClosedJournalException
      */
-    public Location write(byte[] data, WriteType write, WriteCallback callback) throws IOException, IllegalStateException {
+    public Location write(byte[] data, WriteType write, WriteCallback callback) throws ClosedJournalException, IOException {
         Location loc = appender.storeItem(data, Location.USER_RECORD_TYPE, write.equals(WriteType.SYNC) ? true : false, callback);
         return loc;
     }
@@ -336,9 +340,10 @@ public class Journal {
      *
      * @param location
      * @throws IOException
-     * @throws IllegalStateException
+     * @throws ClosedJournalException
+     * @throws CompactedDataFileException
      */
-    public void delete(Location location) throws IOException, IllegalStateException {
+    public void delete(Location location) throws ClosedJournalException, CompactedDataFileException, IOException {
         accessor.updateLocation(location, Location.DELETED_RECORD_TYPE, true);
     }
 
@@ -348,8 +353,10 @@ public class Journal {
      *
      * @return
      * @throws IOException
+     * @throws ClosedJournalException
+     * @throws CompactedDataFileException
      */
-    public Iterable<Location> redo() throws IOException {
+    public Iterable<Location> redo() throws ClosedJournalException, CompactedDataFileException, IOException {
         Entry<Integer, DataFile> firstEntry = dataFiles.firstEntry();
         if (firstEntry == null) {
             return new Redo(null);
@@ -364,8 +371,10 @@ public class Journal {
      * @param start
      * @return
      * @throws IOException
+     * @throws CompactedDataFileException
+     * @throws ClosedJournalException
      */
-    public Iterable<Location> redo(Location start) throws IOException {
+    public Iterable<Location> redo(Location start) throws ClosedJournalException, CompactedDataFileException, IOException {
         return new Redo(start);
     }
 
@@ -376,8 +385,10 @@ public class Journal {
      *
      * @return
      * @throws IOException
+     * @throws CompactedDataFileException
+     * @throws ClosedJournalException
      */
-    public Iterable<Location> undo() throws IOException {
+    public Iterable<Location> undo() throws ClosedJournalException, CompactedDataFileException, IOException {
         return new Undo(redo());
     }
 
@@ -389,8 +400,10 @@ public class Journal {
      * @param end
      * @return
      * @throws IOException
+     * @throws CompactedDataFileException
+     * @throws ClosedJournalException
      */
-    public Iterable<Location> undo(Location end) throws IOException {
+    public Iterable<Location> undo(Location end) throws ClosedJournalException, CompactedDataFileException, IOException {
         return new Undo(redo(end));
     }
 
@@ -657,7 +670,7 @@ public class Journal {
     ConcurrentNavigableMap<Integer, DataFile> getDataFiles() {
         return dataFiles;
     }
-    
+
     DataFile getDataFile(Integer id) throws CompactedDataFileException {
         Entry<Integer, DataFile> first = dataFiles.firstEntry();
         if (first != null && first.getKey() <= id) {
@@ -735,7 +748,7 @@ public class Journal {
                     if (currentDataFile != null) {
                         currentLocation = accessor.readLocationDetails(currentDataFile.getDataFileId(), 0);
                         if (currentLocation != null && (currentLocation.getType() == type || type == Location.ANY_RECORD_TYPE)) {
-                           result = currentLocation;
+                            result = currentLocation;
                         }
                     } else {
                         break;
@@ -958,7 +971,7 @@ public class Journal {
             } catch (Throwable ex) {
                 warn("Cannot replicate!", ex);
             }
-            
+
             control.location.setThisFilePosition(offset);
             return control.location;
         }

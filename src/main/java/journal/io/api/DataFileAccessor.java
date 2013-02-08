@@ -41,9 +41,10 @@ class DataFileAccessor {
 
     private final ConcurrentMap<Thread, ConcurrentMap<Integer, RandomAccessFile>> perThreadDataFileRafs = new ConcurrentHashMap<Thread, ConcurrentMap<Integer, RandomAccessFile>>();
     private final ConcurrentMap<Thread, ConcurrentMap<Integer, Lock>> perThreadDataFileLocks = new ConcurrentHashMap<Thread, ConcurrentMap<Integer, Lock>>();
-    private final ReadWriteLock compactionLock = new ReentrantReadWriteLock();
-    private final Lock accessorLock = compactionLock.readLock();
-    private final Lock compactorMutex = compactionLock.writeLock();
+    private final ReadWriteLock accessorLock = new ReentrantReadWriteLock();
+    private final Lock shared = accessorLock.readLock();
+    private final Lock exclusive = accessorLock.writeLock();
+    private volatile boolean opened;
     //
     private final Journal journal;
     //    
@@ -53,29 +54,33 @@ class DataFileAccessor {
         this.journal = journal;
     }
 
-    void updateLocation(Location location, byte type, boolean sync) throws CompactedDataFileException, IOException {
+    void updateLocation(Location location, byte type, boolean sync) throws ClosedJournalException, CompactedDataFileException, IOException {
         Lock threadLock = getOrCreateLock(Thread.currentThread(), location.getDataFileId());
-        accessorLock.lock();
+        shared.lock();
         threadLock.lock();
         try {
-            journal.sync();
-            //
-            RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), location.getDataFileId());
-            if (seekToLocation(raf, location, false)) {
-                int pointer = raf.readInt();
-                int size = raf.readInt();
-                raf.write(type);
-                IOHelper.skipBytes(raf, size - Journal.RECORD_HEADER_SIZE);
-                location.setType(type);
-                if (sync) {
-                    IOHelper.sync(raf.getFD());
+            if (opened) {
+                journal.sync();
+                //
+                RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), location.getDataFileId());
+                if (seekToLocation(raf, location, false)) {
+                    int pointer = raf.readInt();
+                    int size = raf.readInt();
+                    raf.write(type);
+                    IOHelper.skipBytes(raf, size - Journal.RECORD_HEADER_SIZE);
+                    location.setType(type);
+                    if (sync) {
+                        IOHelper.sync(raf.getFD());
+                    }
+                } else {
+                    throw new IOException("Cannot find location: " + location);
                 }
             } else {
-                throw new IOException("Cannot find location: " + location);
+                throw new ClosedJournalException("The journal is closed!");
             }
         } finally {
             threadLock.unlock();
-            accessorLock.unlock();
+            shared.unlock();
         }
     }
 
@@ -92,7 +97,7 @@ class DataFileAccessor {
         }
     }
 
-    Location readLocationDetails(int file, int pointer) throws CompactedDataFileException, IOException {
+    Location readLocationDetails(int file, int pointer) throws ClosedJournalException, IOException {
         WriteCommand asyncWrite = journal.getInflightWrites().get(new Location(file, pointer));
         if (asyncWrite != null) {
             Location location = new Location(file, pointer);
@@ -104,33 +109,37 @@ class DataFileAccessor {
         } else {
             Location location = new Location(file, pointer);
             Lock threadLock = getOrCreateLock(Thread.currentThread(), location.getDataFileId());
-            accessorLock.lock();
+            shared.lock();
             threadLock.lock();
             try {
-                RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), location.getDataFileId());
-                if (seekToLocation(raf, location, true)) {
-                    if (location.getSize() > 0) {
-                        location.setData(readLocationData(location, raf));
-                        location.setDataFileGeneration(journal.getDataFile(file).getDataFileGeneration());
-                        location.setNextFilePosition(raf.getFilePointer());
-                        return location;
+                if (opened) {
+                    RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), location.getDataFileId());
+                    if (seekToLocation(raf, location, true)) {
+                        if (location.getSize() > 0) {
+                            location.setData(readLocationData(location, raf));
+                            location.setDataFileGeneration(journal.getDataFile(file).getDataFileGeneration());
+                            location.setNextFilePosition(raf.getFilePointer());
+                            return location;
+                        } else {
+                            return null;
+                        }
                     } else {
                         return null;
                     }
                 } else {
-                    return null;
+                    throw new ClosedJournalException("The journal is closed!");
                 }
             } catch (CompactedDataFileException ex) {
                 warn(ex.getMessage());
                 return null;
             } finally {
                 threadLock.unlock();
-                accessorLock.unlock();
+                shared.unlock();
             }
         }
     }
 
-    Location readNextLocationDetails(Location start, final int type) throws CompactedDataFileException, IOException {
+    Location readNextLocationDetails(Location start, final int type) throws ClosedJournalException, IOException {
         // Try with the most immediate subsequent location among inflight writes:
         Location asyncLocation = new Location(start.getDataFileId(), start.getPointer() + 1);
         WriteCommand asyncWrite = journal.getInflightWrites().get(asyncLocation);
@@ -147,41 +156,45 @@ class DataFileAccessor {
         } else {
             // Else read from file:
             Lock threadLock = getOrCreateLock(Thread.currentThread(), start.getDataFileId());
-            accessorLock.lock();
+            shared.lock();
             threadLock.lock();
             try {
-                RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), start.getDataFileId());
-                if (isIntoNextLocation(raf, start) || (seekToLocation(raf, start, true) && skipLocationData(raf, start))) {
-                    Location next = new Location(start.getDataFileId());
-                    do {
-                        next.setThisFilePosition(raf.getFilePointer());
-                        next.setPointer(raf.readInt());
-                        next.setSize(raf.readInt());
-                        next.setType(raf.readByte());
-                        if (type != Location.ANY_RECORD_TYPE && next.getType() != type) {
-                            IOHelper.skipBytes(raf, next.getSize() - Journal.RECORD_HEADER_SIZE);
+                if (opened) {
+                    RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), start.getDataFileId());
+                    if (isIntoNextLocation(raf, start) || (seekToLocation(raf, start, true) && skipLocationData(raf, start))) {
+                        Location next = new Location(start.getDataFileId());
+                        do {
+                            next.setThisFilePosition(raf.getFilePointer());
+                            next.setPointer(raf.readInt());
+                            next.setSize(raf.readInt());
+                            next.setType(raf.readByte());
+                            if (type != Location.ANY_RECORD_TYPE && next.getType() != type) {
+                                IOHelper.skipBytes(raf, next.getSize() - Journal.RECORD_HEADER_SIZE);
+                            } else {
+                                break;
+                            }
+                        } while (raf.length() - raf.getFilePointer() > Journal.RECORD_HEADER_SIZE);
+                        if (type == Location.ANY_RECORD_TYPE || next.getType() == type) {
+                            next.setData(readLocationData(next, raf));
+                            next.setDataFileGeneration(journal.getDataFile(start.getDataFileId()).getDataFileGeneration());
+                            next.setNextFilePosition(raf.getFilePointer());
+                            return next;
                         } else {
-                            break;
+                            raf.seek(0);
+                            return null;
                         }
-                    } while (raf.length() - raf.getFilePointer() > Journal.RECORD_HEADER_SIZE);
-                    if (type == Location.ANY_RECORD_TYPE || next.getType() == type) {
-                        next.setData(readLocationData(next, raf));
-                        next.setDataFileGeneration(journal.getDataFile(start.getDataFileId()).getDataFileGeneration());
-                        next.setNextFilePosition(raf.getFilePointer());
-                        return next;
                     } else {
-                        raf.seek(0);
                         return null;
                     }
                 } else {
-                    return null;
+                    throw new ClosedJournalException("The journal is closed!");
                 }
             } catch (CompactedDataFileException ex) {
                 warn(ex.getMessage());
                 return null;
             } finally {
                 threadLock.unlock();
-                accessorLock.unlock();
+                shared.unlock();
             }
         }
     }
@@ -191,14 +204,50 @@ class DataFileAccessor {
         for (Entry<Thread, ConcurrentMap<Integer, RandomAccessFile>> threadRafs : perThreadDataFileRafs.entrySet()) {
             for (Entry<Integer, RandomAccessFile> raf : threadRafs.getValue().entrySet()) {
                 if (raf.getKey().equals(dataFileId)) {
-                    dispose(threadRafs.getKey(), dataFileId);
+                    disposeByThread(threadRafs.getKey(), dataFileId);
                     break;
                 }
             }
         }
     }
 
-    private void dispose(Thread t, Integer dataFileId) {
+    void open() {
+        disposer = journal.getDisposer();
+        disposer.scheduleAtFixedRate(new ResourceDisposer(), journal.getDisposeInterval(), journal.getDisposeInterval(), TimeUnit.MILLISECONDS);
+        opened = true;
+    }
+
+    void close() {
+        exclusive.lock();
+        try {
+            opened = false;
+            for (Entry<Thread, ConcurrentMap<Integer, RandomAccessFile>> threadRafs : perThreadDataFileRafs.entrySet()) {
+                for (Entry<Integer, RandomAccessFile> raf : threadRafs.getValue().entrySet()) {
+                    disposeByThread(threadRafs.getKey(), raf.getKey());
+                }
+            }
+        } finally {
+            exclusive.unlock();
+        }
+    }
+
+    void pause() throws ClosedJournalException {
+        if (opened) {
+            exclusive.lock();
+        } else {
+            throw new ClosedJournalException("The journal is closed!");
+        }
+    }
+
+    void resume() throws ClosedJournalException {
+        if (opened) {
+            exclusive.unlock();
+        } else {
+            throw new ClosedJournalException("The journal is closed!");
+        }
+    }
+
+    private void disposeByThread(Thread t, Integer dataFileId) {
         Lock lock = getOrCreateLock(t, dataFileId);
         lock.lock();
         try {
@@ -210,28 +259,7 @@ class DataFileAccessor {
         }
     }
 
-    void open() {
-        disposer = journal.getDisposer();
-        disposer.scheduleAtFixedRate(new ResourceDisposer(), journal.getDisposeInterval(), journal.getDisposeInterval(), TimeUnit.MILLISECONDS);
-    }
-
-    void close() {
-        for (Entry<Thread, ConcurrentMap<Integer, RandomAccessFile>> threadRafs : perThreadDataFileRafs.entrySet()) {
-            for (Entry<Integer, RandomAccessFile> raf : threadRafs.getValue().entrySet()) {
-                dispose(threadRafs.getKey(), raf.getKey());
-            }
-        }
-    }
-
-    void pause() {
-        compactorMutex.lock();
-    }
-
-    void resume() {
-        compactorMutex.unlock();
-    }
-    
-    private boolean isIntoNextLocation(RandomAccessFile raf, Location source) throws IOException {
+    private boolean isIntoNextLocation(RandomAccessFile raf, Location source) throws CompactedDataFileException, IOException {
         int generation = journal.getDataFile(source.getDataFileId()).getDataFileGeneration();
         long position = raf.getFilePointer();
         return source.getDataFileGeneration() == generation

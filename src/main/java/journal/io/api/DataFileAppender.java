@@ -43,6 +43,7 @@ class DataFileAppender {
     private final AtomicReference<Exception> asyncException = new AtomicReference<Exception>();
     private final AtomicBoolean batching = new AtomicBoolean(false);
     private final AtomicBoolean writing = new AtomicBoolean(false);
+    private volatile boolean opened;
     //
     private final Journal journal;
     //
@@ -76,7 +77,7 @@ class DataFileAppender {
         return location;
     }
 
-    Future<Boolean> sync() throws IOException {
+    Future<Boolean> sync() throws ClosedJournalException, IOException {
         int spinnings = 0;
         int limit = SPIN_RETRIES;
         while (true) {
@@ -84,6 +85,9 @@ class DataFileAppender {
                 throw new IOException(asyncException.get());
             }
             try {
+                if (!opened) {
+                    throw new ClosedJournalException("The journal is closed!");
+                }
                 if (batching.compareAndSet(false, true)) {
                     try {
                         Future result = null;
@@ -115,7 +119,7 @@ class DataFileAppender {
         }
     }
 
-    private Location enqueueBatch(WriteCommand writeRecord) throws IOException {
+    private Location enqueueBatch(WriteCommand writeRecord) throws ClosedJournalException, IOException {
         WriteBatch currentBatch = null;
         int spinnings = 0;
         int limit = SPIN_RETRIES;
@@ -124,6 +128,9 @@ class DataFileAppender {
                 throw new IOException(asyncException.get());
             }
             try {
+                if (!opened) {
+                    throw new ClosedJournalException("The journal is closed!");
+                }
                 if (batching.compareAndSet(false, true)) {
                     boolean hasNewBatch = false;
                     try {
@@ -199,10 +206,12 @@ class DataFileAppender {
 
     void open() {
         writer = journal.getWriter();
+        opened = true;
     }
 
     void close() throws IOException {
         try {
+            opened = false;
             while (batching.get() == true) {
                 Thread.sleep(SPIN_BACKOFF);
             }
@@ -230,7 +239,6 @@ class DataFileAppender {
      */
     private void signalBatch() {
         writer.execute(new Runnable() {
-
             @Override
             public void run() {
                 // Wait for other threads writing on the same journal to finish:
@@ -256,7 +264,7 @@ class DataFileAppender {
 
                             // Perform batch:
                             Location batchLocation = wb.perform(lastAppendRaf, journal.isChecksum(), journal.isPhysicalSync(), journal.getReplicationTarget());
-                            
+
                             // Add batch location as hint:
                             journal.getHints().put(batchLocation, batchLocation.getThisFilePosition());
 

@@ -136,33 +136,6 @@ public class ReadWriteTest extends AbstractJournalTest {
     }
 
     @Test
-    public void testWriteCallbackOnError() throws Exception {
-        final int iterations = 10;
-        final CountDownLatch writeLatch = new CountDownLatch(iterations);
-        WriteCallback callback = new WriteCallback() {
-
-            @Override
-            public void onSync(Location syncedLocation) {
-            }
-
-            @Override
-            public void onError(Location location, Throwable error) {
-                writeLatch.countDown();
-            }
-        };
-        for (int i = 0; i < iterations; i++) {
-            journal.write(new byte[]{(byte) i}, Journal.WriteType.ASYNC, callback);
-        }
-        deleteFilesInDirectory(dir);
-        dir.delete();
-        try {
-            journal.sync();
-        } catch (Exception ex) {
-        }
-        assertTrue(writeLatch.await(5, TimeUnit.SECONDS));
-    }
-
-    @Test
     public void testSyncAndCallReplicator() throws Exception {
         final int iterations = 3;
         final CountDownLatch writeLatch = new CountDownLatch(1);
