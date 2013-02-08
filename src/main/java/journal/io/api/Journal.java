@@ -775,6 +775,7 @@ public class Journal {
         while ((candidate = hints.higherKey(toRemove)) != null && candidate.getDataFileId() == toRemove.getDataFileId()) {
             hints.remove(candidate);
         }
+        accessor.dispose(dataFile);
         if (archiveFiles) {
             dataFile.move(getDirectoryArchive());
         } else {
