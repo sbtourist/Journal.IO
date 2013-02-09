@@ -170,6 +170,10 @@ public class Journal {
                 return dir.equals(directory) && n.startsWith(filePrefix) && n.endsWith(fileSuffix);
             }
         });
+        if (files == null) {
+            throw new IllegalStateException("Failed to access content of "+directory);
+        }
+
         Arrays.sort(files, new Comparator<File>() {
             @Override
             public int compare(File f1, File f2) {
@@ -180,7 +184,7 @@ public class Journal {
                 return index1 - index2;
             }
         });
-        if (files != null && files.length > 0) {
+        if (files.length > 0) {
             for (int i = 0; i < files.length; i++) {
                 try {
                     File file = files[i];
