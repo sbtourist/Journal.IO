@@ -19,7 +19,7 @@ import org.junit.Test;
 
 public class LifeCycleTest {
 
-    @Test(expected=IllegalStateException.class)
+    @Test(expected=IOException.class)
     public void testInvalidDirectoryIsRejected() throws IOException {
       final File file = new File("non-existing");
       final Journal localournal = new Journal();
