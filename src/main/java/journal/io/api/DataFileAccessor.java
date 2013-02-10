@@ -60,7 +60,9 @@ class DataFileAccessor {
         threadLock.lock();
         try {
             if (opened) {
-                journal.sync();
+                if (journal.getInflightWrites().containsKey(location)) {
+                    journal.sync();
+                }
                 //
                 RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), location.getDataFileId());
                 if (seekToLocation(raf, location, false)) {
@@ -278,39 +280,52 @@ class DataFileAccessor {
             length = raf.readInt();
             type = raf.readByte();
         }
-        // Else seek:
+        // If pointer is wrong, seek by trying the saved file position:
         if (pointer != destination.getPointer()) {
-            Entry<Location, Long> hint = journal.getHints().lowerEntry(destination);
-            if (hint != null && hint.getKey().getDataFileId() == destination.getDataFileId()) {
-                position = hint.getValue();
-            } else {
-                position = Journal.FILE_HEADER_SIZE;
-            }
-            raf.seek(position);
-            if (raf.length() - position > Journal.RECORD_HEADER_SIZE) {
+            position = destination.getThisFilePosition();
+            if (position != Location.NOT_SET && raf.length() - position > Journal.RECORD_HEADER_SIZE) {
+                raf.seek(position);
                 pointer = raf.readInt();
                 length = raf.readInt();
                 type = raf.readByte();
-                while (pointer != destination.getPointer()) {
-                    IOHelper.skipBytes(raf, length - Journal.RECORD_HEADER_SIZE);
-                    position = raf.getFilePointer();
-                    if (raf.length() - position > Journal.RECORD_HEADER_SIZE) {
-                        pointer = raf.readInt();
-                        length = raf.readInt();
-                        type = raf.readByte();
-                    } else {
-                        return false;
-                    }
+            }
+            // Else seek by using hints:
+            if (pointer != destination.getPointer()) {
+                Entry<Location, Long> hint = journal.getHints().lowerEntry(destination);
+                if (hint != null && hint.getKey().getDataFileId() == destination.getDataFileId()) {
+                    position = hint.getValue();
+                } else {
+                    position = Journal.FILE_HEADER_SIZE;
                 }
-            } else {
-                return false;
+                raf.seek(position);
+                if (raf.length() - position > Journal.RECORD_HEADER_SIZE) {
+                    pointer = raf.readInt();
+                    length = raf.readInt();
+                    type = raf.readByte();
+                    while (pointer != destination.getPointer()) {
+                        IOHelper.skipBytes(raf, length - Journal.RECORD_HEADER_SIZE);
+                        position = raf.getFilePointer();
+                        if (raf.length() - position > Journal.RECORD_HEADER_SIZE) {
+                            pointer = raf.readInt();
+                            length = raf.readInt();
+                            type = raf.readByte();
+                        } else {
+                            return false;
+                        }
+                    }
+                } else {
+                    return false;
+                }
             }
         }
         if (fillLocation) {
+            // If we have to fill the location, do so and do not seek back to this position:
             destination.setThisFilePosition(position);
             destination.setSize(length);
             destination.setType(type);
         } else {
+            // Otherwise seek back to this position as caller will probably read
+            // things by itself:
             raf.seek(position);
         }
         return true;
@@ -351,6 +366,7 @@ class DataFileAccessor {
         RandomAccessFile raf = rafs.get(file);
         if (raf == null) {
             raf = journal.getDataFile(file).openRandomAccessFile();
+            IOHelper.skipBytes(raf, journal.FILE_HEADER_SIZE);
             rafs.put(file, raf);
         }
         return raf;

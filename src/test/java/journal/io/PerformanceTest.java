@@ -75,9 +75,10 @@ public class PerformanceTest {
         for (int i = 0; i < iterations; i++) {
             journal.write(payload, Journal.WriteType.SYNC);
         }
-        journal.close();
         //
-        System.out.println("Time in millis: " + (System.currentTimeMillis() - start));
+        System.out.println("testSyncPerf time in millis: " + (System.currentTimeMillis() - start));
+        //
+        journal.close();
     }
 
     @Test
@@ -89,9 +90,10 @@ public class PerformanceTest {
         for (int i = 0; i < iterations; i++) {
             journal.write(payload, Journal.WriteType.ASYNC);
         }
-        journal.close();
         //
-        System.out.println("Time in millis: " + (System.currentTimeMillis() - start));
+        System.out.println("testAsyncPerf time in millis: " + (System.currentTimeMillis() - start));
+        //
+        journal.close();
     }
 
     @Test
@@ -107,11 +109,11 @@ public class PerformanceTest {
             assertEquals("" + i++, new String(journal.read(current, Journal.ReadType.ASYNC), "UTF-8"));
         }
         //
-        journal.close();
+        System.out.println("testSequentialReadPerf time in millis: " + (System.currentTimeMillis() - start));
         //
-        System.out.println("Time in millis: " + (System.currentTimeMillis() - start));
+        journal.close();
     }
-    
+
     @Test
     public void testRandomReadPerf() throws Exception {
         int iterations = 1000000;
@@ -128,14 +130,33 @@ public class PerformanceTest {
             assertEquals("" + n, new String(journal.read(read, Journal.ReadType.ASYNC), "UTF-8"));
         }
         //
-        journal.close();
+        System.out.println("testRandomReadPerf time in millis: " + (System.currentTimeMillis() - start));
         //
-        System.out.println("Time in millis: " + (System.currentTimeMillis() - start));
+        journal.close();
+    }
+
+    @Test
+    public void testDeletePerf() throws Exception {
+        int iterations = 1000000;
+        byte[] payload = new byte[100];
+        for (int i = 0; i < iterations; i++) {
+            journal.write(payload, Journal.WriteType.ASYNC);
+        }
+        //
+        long start = System.currentTimeMillis();
+        //
+        for (Location location : journal.redo()) {
+            journal.delete(location);
+        }
+        //
+        System.out.println("testDeletePerf time in millis: " + (System.currentTimeMillis() - start));
+        //
+        journal.close();
     }
 
     protected void configure(Journal journal) {
-        journal.setMaxFileLength(1024 * 1024 * 32);
-        journal.setMaxWriteBatchSize(1024 * 100);
+        journal.setMaxFileLength(1024 * 1024 * 10);
+        journal.setMaxWriteBatchSize(1024);
     }
 
     private void deleteFilesInDirectory(File directory) {

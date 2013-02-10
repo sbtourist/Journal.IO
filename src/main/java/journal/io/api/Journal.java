@@ -344,7 +344,7 @@ public class Journal {
      * @throws CompactedDataFileException
      */
     public void delete(Location location) throws ClosedJournalException, CompactedDataFileException, IOException {
-        accessor.updateLocation(location, Location.DELETED_RECORD_TYPE, true);
+        accessor.updateLocation(location, Location.DELETED_RECORD_TYPE, physicalSync);
     }
 
     /**

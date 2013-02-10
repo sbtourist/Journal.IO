@@ -26,7 +26,7 @@ import static org.junit.Assert.*;
 public class ReadWriteTest extends AbstractJournalTest {
 
     @Test(expected = IOException.class)
-    public void testAsyncSpeculativeReadWorksButSyncReadRaisesException() throws Exception {
+    public void testAfterDeleteAsyncSpeculativeReadWorksButSyncReadRaisesException() throws Exception {
         Location data = journal.write(new String("DATA").getBytes("UTF-8"), Journal.WriteType.SYNC);
         journal.delete(data);
         assertEquals("DATA", journal.read(data, Journal.ReadType.ASYNC));
