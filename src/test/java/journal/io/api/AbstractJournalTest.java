@@ -45,6 +45,7 @@ public abstract class AbstractJournalTest {
 
     @After
     public void tearDown() throws Exception {
+        preTearDown();
         journal.close();
         deleteFilesInDirectory(dir);
         if (!dir.delete()) {
@@ -57,7 +58,11 @@ public abstract class AbstractJournalTest {
         journal.setMaxWriteBatchSize(1024);
     }
 
-    protected void postSetUp() {
+    protected void postSetUp() throws Exception {
+        // stub
+    }
+
+    protected void preTearDown() throws Exception {
         // stub
     }
 

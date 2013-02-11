@@ -21,6 +21,28 @@ import static org.junit.Assert.*;
  */
 public class RecoveryTest extends AbstractJournalTest {
 
+    private Journal customJournal;
+    
+    @Override
+    protected void postSetUp() throws Exception {
+        customJournal = new Journal();
+        customJournal.setDirectory(dir);
+        configure(customJournal);
+    }
+    
+    @Override
+    protected void preTearDown() throws Exception {
+        if (customJournal != null) {
+            customJournal.close();
+        }
+    }
+    
+    @Override
+    protected void configure(Journal journal) {
+        journal.setMaxFileLength(1024 * 100);
+        journal.setMaxWriteBatchSize(1024);
+    }
+
     @Test
     public void testLogRecoveryWithFollowingWrites() throws Exception {
         int iterations = 100;
@@ -87,13 +109,11 @@ public class RecoveryTest extends AbstractJournalTest {
         }
         journal.close();
 
-        Journal newJournal = new Journal();
-        newJournal.setDirectory(dir);
-        configure(newJournal);
-        newJournal.open();
+        customJournal.open();
+
         int i = 0;
-        for (Location location : newJournal.redo()) {
-            byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
+        for (Location location : customJournal.redo()) {
+            byte[] buffer = customJournal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
         assertEquals(iterations, i);
@@ -107,22 +127,15 @@ public class RecoveryTest extends AbstractJournalTest {
         }
         journal.close();
 
-        Journal newJournal = new Journal();
-        newJournal.setDirectory(dir);
-        configure(newJournal);
-        newJournal.open();
+        customJournal.open();
+
         int i = 0;
-        for (Location location : newJournal.redo()) {
-            byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
+        for (Location location : customJournal.redo()) {
+            byte[] buffer = customJournal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
-            newJournal.delete(location);
+            customJournal.delete(location);
         }
         assertEquals(iterations, i);
     }
 
-    @Override
-    protected void configure(Journal journal) {
-        journal.setMaxFileLength(1024 * 100);
-        journal.setMaxWriteBatchSize(1024);
-    }
 }

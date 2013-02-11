@@ -14,6 +14,8 @@
 package journal.io.api;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
@@ -117,8 +119,8 @@ public class ReadWriteTest extends AbstractJournalTest {
     public void testWriteCallbackOnSync() throws Exception {
         final int iterations = 10;
         final CountDownLatch writeLatch = new CountDownLatch(iterations);
+        final Map<Location, Throwable> errors = new HashMap<Location, Throwable>();
         WriteCallback callback = new WriteCallback() {
-
             @Override
             public void onSync(Location syncedLocation) {
                 writeLatch.countDown();
@@ -126,6 +128,7 @@ public class ReadWriteTest extends AbstractJournalTest {
 
             @Override
             public void onError(Location location, Throwable error) {
+                errors.put(location, error);
             }
         };
         for (int i = 0; i < iterations; i++) {
@@ -133,6 +136,7 @@ public class ReadWriteTest extends AbstractJournalTest {
         }
         journal.sync();
         assertTrue(writeLatch.await(5, TimeUnit.SECONDS));
+        assertTrue("Caught errors: " + errors, errors.isEmpty());
     }
 
     @Test

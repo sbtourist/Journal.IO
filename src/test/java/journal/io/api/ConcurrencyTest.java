@@ -169,9 +169,4 @@ public class ConcurrencyTest extends AbstractJournalTest {
         assertEquals(iterations - deletions, iterationsCounter.get());
     }
 
-    @Override
-    protected void configure(Journal journal) {
-        journal.setMaxFileLength(1024);
-        journal.setMaxWriteBatchSize(1024);
-    }
 }
