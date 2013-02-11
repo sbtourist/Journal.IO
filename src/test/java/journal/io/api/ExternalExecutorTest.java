@@ -26,32 +26,46 @@ import static org.junit.Assert.*;
  */
 public class ExternalExecutorTest extends AbstractJournalTest {
 
+    private Journal customJournal;
+    
+    @Override
+    protected void postSetUp() throws Exception {
+        customJournal = new Journal();
+        customJournal.setDirectory(dir);
+        configure(customJournal);
+    }
+    
+    @Override
+    protected void preTearDown() throws Exception {
+        if (customJournal != null) {
+            customJournal.close();
+        }
+    }
+    
     @Test
     public void testJournalWithExternalExecutor() throws Exception {
-        Journal customJournal = new Journal();
-        customJournal.setDirectory(dir);
-        customJournal.setWriter(Executors.newFixedThreadPool(10));
-        configure(customJournal);
+        ExecutorService executor = Executors.newFixedThreadPool(10);
+        customJournal.setWriter(executor);
         customJournal.open();
+
         int iterations = 100000;
         for (int i = 0; i < iterations; i++) {
             customJournal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
         }
+
         int i = 0;
         for (Location location : customJournal.redo()) {
             byte[] buffer = customJournal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
+
         assertEquals(iterations, i);
     }
 
     @Test
     public void testJournalWithExternalExecutorAndExecuteWritesWithExecutor() throws Exception {
-        final Journal customJournal = new Journal();
         ExecutorService executor = Executors.newFixedThreadPool(3);
-        customJournal.setDirectory(dir);
         customJournal.setWriter(executor);
-        configure(customJournal);
         customJournal.open();
 
         final byte[] bytes = "a".getBytes();
