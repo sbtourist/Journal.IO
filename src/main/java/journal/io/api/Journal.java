@@ -171,7 +171,7 @@ public class Journal {
             }
         });
         if (files == null) {
-            throw new IOException("Failed to access content of "+directory);
+            throw new IOException("Failed to access content of " + directory);
         }
 
         Arrays.sort(files, new Comparator<File>() {

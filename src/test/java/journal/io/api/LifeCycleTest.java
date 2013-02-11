@@ -16,19 +16,53 @@ package journal.io.api;
 import java.io.File;
 import java.io.IOException;
 import org.junit.Test;
+import static org.junit.Assert.*;
 
-public class LifeCycleTest {
+public class LifeCycleTest extends AbstractJournalTest {
 
-    @Test(expected=IOException.class)
-    public void testInvalidDirectoryIsRejected() throws IOException {
-      final File file = new File("non-existing");
-      final Journal localournal = new Journal();
-      localournal.setDirectory(file);
-      try {
-          localournal.open();
-      } finally {
-          localournal.close();
-      }
+    @Test(expected = ClosedJournalException.class)
+    public void testWritingFailsAfterClose() throws Exception {
+        journal.close();
+        journal.write("data".getBytes("UTF-8"), Journal.WriteType.SYNC);
     }
 
+    @Test(expected = ClosedJournalException.class)
+    public void testReadingFailsAfterClose() throws Exception {
+        Location location = journal.write("data".getBytes("UTF-8"), Journal.WriteType.SYNC);
+        journal.close();
+        journal.read(location, Journal.ReadType.SYNC);
+    }
+
+    @Test(expected = ClosedJournalException.class)
+    public void testDeletingFailsAfterClose() throws Exception {
+        Location location = journal.write("data".getBytes("UTF-8"), Journal.WriteType.SYNC);
+        journal.close();
+        journal.delete(location);
+    }
+
+    @Test(expected = ClosedJournalException.class)
+    public void testRedoingFailsAfterClose() throws Exception {
+        Location location = journal.write("data".getBytes("UTF-8"), Journal.WriteType.SYNC);
+        journal.close();
+        journal.redo();
+    }
+
+    @Test(expected = ClosedJournalException.class)
+    public void testCompactingFailsAfterClose() throws Exception {
+        journal.close();
+        journal.compact();
+    }
+
+    @Test(expected = IOException.class)
+    public void testOpenFailsWithInvalidDirectory() throws IOException {
+        File badDir = new File("non-existing");
+        Journal badJournal = new Journal();
+        badJournal.setDirectory(badDir);
+        try {
+            badJournal.open();
+            fail("Should file if dir does not exist!");
+        } finally {
+            badJournal.close();
+        }
+    }
 }
