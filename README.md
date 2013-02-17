@@ -1,6 +1,6 @@
-# Journal.IO 1.2
+# Journal.IO 1.3
 
-Journal.IO is a zero-dependency, fast and easy-to-use journal storage implementation based on append-only rotating logs and checksummed variable-length records, 
+Journal.IO is a lightweight, fast and easy-to-use journal storage implementation based on append-only rotating logs and checksummed variable-length records, 
 supporting concurrent reads and writes, dynamic batching, tunable durability and data compaction.
 
 Journal.IO has been forked from the [HawtJournal](https://github.com/fusesource/hawtjournal) project, 
@@ -89,21 +89,12 @@ disabled by default, it can be enabled by setting _Journal#setPhysicalSync_ true
 
 ## Download
 
-Journal.IO is a self-contained jar you can download from the Downloads section above.
-
-If you're a Maven user, you can also configure it on your project by importing the repository:
-
-    <repository>
-        <id>Journal.IO</id>
-        <url>https://raw.github.com/sbtourist/Journal.IO/master/m2/repo</url>
-    </repository>
-
-And then declaring the dependency:
+You can download Journal.IO via Maven repositories, here are the coordinates:
 
     <dependency>
-        <groupId>journalio</groupId>
+        <groupId>com.github.sbtourist</groupId>
        <artifactId>journalio</artifactId>
-       <version>1.2</version>
+       <version>1.3</version>
     </dependency>
 
 ## Feedback
@@ -129,3 +120,9 @@ Journal.IO is based on the HawtJournal project, for original copyright note see:
 [Chris Vest](http://www.twitter.com/chvest) (Contributor)
 
 [Martin Krasser](http://www.twitter.com/mrt1nz) (Contributor)
+
+[Holger Hoffstätte](https://twitter.com/asynchronaut) (Contributor)
+
+[Julien Eluard](https://twitter.com/jeluard) (Contributor)
+
+[Brian McCallister](https://twitter.com/brianm) (Contributor)
