@@ -27,7 +27,7 @@
     <groupId>com.github.sbtourist</groupId>
     <artifactId>journalio</artifactId>
     <packaging>jar</packaging>
-    <version>1.3-SNAPSHOT</version>
+    <version>1.3</version>
 
     <name>Journal.IO</name>
 
