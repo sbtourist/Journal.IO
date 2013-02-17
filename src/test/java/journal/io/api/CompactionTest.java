@@ -47,8 +47,9 @@ public class CompactionTest extends AbstractJournalTest {
     }
 
     @Override
-    protected void configure(Journal journal) {
+    protected boolean configure(Journal journal) {
         journal.setMaxFileLength(1024 * 100);
         journal.setMaxWriteBatchSize(1024);
+        return true;
     }
 }

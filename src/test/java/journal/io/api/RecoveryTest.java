@@ -78,51 +78,66 @@ public class RecoveryTest extends AbstractJournalTest {
         //
         journal.open();
     }
-    
+
     @Test
     public void testOpenAndRecoveryWithNewJournalInstanceAfterLargeNumberOfWrites() throws Exception {
         int iterations = 100000;
-        for (int i = 0; i < iterations; i++) {
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+        try {
+            for (int i = 0; i < iterations; i++) {
+                journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+            }
+        } finally {
+            journal.close();
         }
-        journal.close();
 
         Journal newJournal = new Journal();
-        newJournal.setDirectory(dir);
-        configure(newJournal);
-        newJournal.open();
-        int i = 0;
-        for (Location location : newJournal.redo()) {
-            byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
-            assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
+        try {
+            newJournal.setDirectory(dir);
+            configure(newJournal);
+            newJournal.open();
+            int i = 0;
+            for (Location location : newJournal.redo()) {
+                byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
+                assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
+            }
+            assertEquals(iterations, i);
+        } finally {
+            newJournal.close();
         }
-        assertEquals(iterations, i);
     }
-    
+
     @Test
     public void testOpenNewJournalInstanceThenRedoAndDeleteData() throws Exception {
         int iterations = 10;
-        for (int i = 0; i < iterations; i++) {
-            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+        try {
+            for (int i = 0; i < iterations; i++) {
+                journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+            }
+        } finally {
+            journal.close();
         }
-        journal.close();
 
         Journal newJournal = new Journal();
-        newJournal.setDirectory(dir);
-        configure(newJournal);
-        newJournal.open();
-        int i = 0;
-        for (Location location : newJournal.redo()) {
-            byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
-            assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
-            newJournal.delete(location);
+        try {
+            newJournal.setDirectory(dir);
+            configure(newJournal);
+            newJournal.open();
+            int i = 0;
+            for (Location location : newJournal.redo()) {
+                byte[] buffer = newJournal.read(location, Journal.ReadType.ASYNC);
+                assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
+                newJournal.delete(location);
+            }
+            assertEquals(iterations, i);
+        } finally {
+            newJournal.close();
         }
-        assertEquals(iterations, i);
     }
 
     @Override
-    protected void configure(Journal journal) {
+    protected boolean configure(Journal journal) {
         journal.setMaxFileLength(1024 * 100);
         journal.setMaxWriteBatchSize(1024);
+        return true;
     }
 }

@@ -170,8 +170,9 @@ public class ConcurrencyTest extends AbstractJournalTest {
     }
 
     @Override
-    protected void configure(Journal journal) {
+    protected boolean configure(Journal journal) {
         journal.setMaxFileLength(1024);
         journal.setMaxWriteBatchSize(1024);
+        return true;
     }
 }

@@ -14,6 +14,8 @@
 package journal.io.api;
 
 import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
@@ -117,8 +119,8 @@ public class ReadWriteTest extends AbstractJournalTest {
     public void testWriteCallbackOnSync() throws Exception {
         final int iterations = 10;
         final CountDownLatch writeLatch = new CountDownLatch(iterations);
+        final Map<Location, Throwable> errors = new ConcurrentHashMap<Location, Throwable>();
         WriteCallback callback = new WriteCallback() {
-
             @Override
             public void onSync(Location syncedLocation) {
                 writeLatch.countDown();
@@ -126,6 +128,7 @@ public class ReadWriteTest extends AbstractJournalTest {
 
             @Override
             public void onError(Location location, Throwable error) {
+                errors.put(location, error);
             }
         };
         for (int i = 0; i < iterations; i++) {
@@ -133,6 +136,7 @@ public class ReadWriteTest extends AbstractJournalTest {
         }
         journal.sync();
         assertTrue(writeLatch.await(5, TimeUnit.SECONDS));
+        assertTrue("Caught errors: " + errors, errors.isEmpty());
     }
 
     @Test
@@ -140,7 +144,6 @@ public class ReadWriteTest extends AbstractJournalTest {
         final int iterations = 3;
         final CountDownLatch writeLatch = new CountDownLatch(1);
         ReplicationTarget replicator = new ReplicationTarget() {
-
             public void replicate(Location startLocation, byte[] data) {
                 if (startLocation.getDataFileId() == 1 && startLocation.getPointer() == 0) {
                     writeLatch.countDown();
@@ -175,7 +178,7 @@ public class ReadWriteTest extends AbstractJournalTest {
             assertTrue(journal.getInflightWrites().isEmpty());
         }
     }
-    
+
     @Test(expected = IOException.class)
     public void testCannotReadDeletedLocation() throws Exception {
         Location location = journal.write("DATA".getBytes("UTF-8"), Journal.WriteType.ASYNC);
@@ -185,8 +188,9 @@ public class ReadWriteTest extends AbstractJournalTest {
     }
 
     @Override
-    protected void configure(Journal journal) {
+    protected boolean configure(Journal journal) {
         journal.setMaxFileLength(1024 * 100);
         journal.setMaxWriteBatchSize(1024);
+        return true;
     }
 }

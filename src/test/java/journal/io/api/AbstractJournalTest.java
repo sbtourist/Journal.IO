@@ -38,9 +38,9 @@ public abstract class AbstractJournalTest {
         }
         journal = new Journal();
         journal.setDirectory(dir);
-        configure(journal);
-        journal.open();
-        postSetUp();
+        if (configure(journal)) {
+            journal.open();
+        }
     }
 
     @After
@@ -52,13 +52,10 @@ public abstract class AbstractJournalTest {
         }
     }
 
-    protected void configure(Journal journal) {
+    protected boolean configure(Journal journal) {
         journal.setMaxFileLength(1024);
         journal.setMaxWriteBatchSize(1024);
-    }
-
-    protected void postSetUp() {
-        // stub
+        return true;
     }
 
     protected final void deleteFilesInDirectory(File directory) {

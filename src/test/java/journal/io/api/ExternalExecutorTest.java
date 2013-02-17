@@ -28,18 +28,15 @@ public class ExternalExecutorTest extends AbstractJournalTest {
 
     @Test
     public void testJournalWithExternalExecutor() throws Exception {
-        Journal customJournal = new Journal();
-        customJournal.setDirectory(dir);
-        customJournal.setWriter(Executors.newFixedThreadPool(10));
-        configure(customJournal);
-        customJournal.open();
+        journal.setWriter(Executors.newFixedThreadPool(10));
+        journal.open();
         int iterations = 100000;
         for (int i = 0; i < iterations; i++) {
-            customJournal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+            journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
         }
         int i = 0;
-        for (Location location : customJournal.redo()) {
-            byte[] buffer = customJournal.read(location, Journal.ReadType.ASYNC);
+        for (Location location : journal.redo()) {
+            byte[] buffer = journal.read(location, Journal.ReadType.ASYNC);
             assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
         }
         assertEquals(iterations, i);
@@ -47,12 +44,9 @@ public class ExternalExecutorTest extends AbstractJournalTest {
 
     @Test
     public void testJournalWithExternalExecutorAndExecuteWritesWithExecutor() throws Exception {
-        final Journal customJournal = new Journal();
         ExecutorService executor = Executors.newFixedThreadPool(3);
-        customJournal.setDirectory(dir);
-        customJournal.setWriter(executor);
-        configure(customJournal);
-        customJournal.open();
+        journal.setWriter(executor);
+        journal.open();
 
         final byte[] bytes = "a".getBytes();
 
@@ -60,9 +54,15 @@ public class ExternalExecutorTest extends AbstractJournalTest {
         for (int i = 0; i < iterations; i++) {
             executor.submit(new Callable<Location>() {
                 public Location call() throws IOException {
-                    return customJournal.write(bytes, Journal.WriteType.SYNC);
+                    return journal.write(bytes, Journal.WriteType.SYNC);
                 }
             }).get(1, TimeUnit.SECONDS);
         }
+    }
+
+    @Override
+    protected boolean configure(Journal journal) {
+        super.configure(journal);
+        return false;
     }
 }
