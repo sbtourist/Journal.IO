@@ -1,0 +1,5 @@
+#!/bin/sh
+
+CP=`for l in *.jar; do echo -n $l:; done`
+CLASSPATH=$CP. groovy Migrate12to13.groovy $@
+
