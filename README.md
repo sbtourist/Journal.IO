@@ -96,6 +96,10 @@ You can download Journal.IO via Maven repositories, here are the coordinates:
        <artifactId>journalio</artifactId>
        <version>1.3</version>
     </dependency>
+    
+## Third Party Tools
+
+  * [Journal.IO Migration tool](https://github.com/arkadius/journalioMigration): to migrate from Journal.IO 1.2 to 1.3 log format. 
 
 ## Feedback
 
