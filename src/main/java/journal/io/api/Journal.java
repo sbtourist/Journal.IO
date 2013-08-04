@@ -89,7 +89,7 @@ public class Journal {
     static final String DEFAULT_FILE_PREFIX = "db-";
     static final String DEFAULT_FILE_SUFFIX = ".log";
     static final int DEFAULT_MAX_FILE_LENGTH = 1024 * 1024 * 32;
-    static final int DEFAULT_DISPOSE_INTERVAL = 1000 * 60;
+    static final int DEFAULT_DISPOSE_INTERVAL = 1000 * 60 * 10;
     static final int MIN_FILE_LENGTH = 1024;
     static final int DEFAULT_MAX_BATCH_SIZE = DEFAULT_MAX_FILE_LENGTH;
     //
