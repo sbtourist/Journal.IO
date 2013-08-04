@@ -1,15 +1,15 @@
 /**
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
  */
 package journal.io.util;
 
@@ -79,6 +79,12 @@ public final class IOHelper {
         }
     }
 
+    public static void renameFile(File src, File dest) throws IOException {
+        if (!src.renameTo(dest)) {
+            throw new IOException("Failed to rename " + src + " to " + dest);
+        }
+    }
+
     public static void copyFile(File src, File dest) throws IOException {
         FileInputStream fileSrc = new FileInputStream(src);
         FileOutputStream fileDest = new FileOutputStream(dest);
@@ -99,7 +105,7 @@ public final class IOHelper {
     public static void sync(FileDescriptor fd) throws IOException {
         IO_STRATEGY.sync(fd);
     }
-    
+
     public static void skipBytes(RandomAccessFile raf, int bytes) throws IOException {
         int n = 0;
         while (n < bytes) {
@@ -119,19 +125,15 @@ public final class IOHelper {
     public interface IOStrategy {
 
         void sync(FileDescriptor fdo) throws IOException;
-
     }
     static final IOStrategy IO_STRATEGY = createIOStrategy();
 
     private static IOStrategy createIOStrategy() {
 
         return new IOStrategy() {
-
             public void sync(FileDescriptor fd) throws IOException {
                 fd.sync();
             }
-
         };
     }
-
 }

@@ -817,8 +817,8 @@ public class Journal {
         accessor.dispose(currentFile);
         totalLength.addAndGet(-currentFile.getLength());
         totalLength.addAndGet(tmpFile.getLength());
-        IOHelper.copyFile(tmpFile.getFile(), currentFile.getFile());
-        IOHelper.deleteFile(tmpFile.getFile());
+        IOHelper.deleteFile(currentFile.getFile());
+        IOHelper.renameFile(tmpFile.getFile(), currentFile.getFile());
         // Increment generation so that sequential reads from locations
         // referring to a different generation will not be valid:
         currentFile.incrementGeneration();
