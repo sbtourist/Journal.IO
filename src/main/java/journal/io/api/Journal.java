@@ -220,6 +220,7 @@ public class Journal {
         opened = false;
         accessor.close();
         appender.close();
+        hints.clear();
         inflightWrites.clear();
         //
         if (managedWriter) {

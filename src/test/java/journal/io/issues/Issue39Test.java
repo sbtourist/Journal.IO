@@ -1,18 +1,19 @@
-package journal.io.api;
+package journal.io.issues;
 
 import org.junit.Test;
 
 import java.util.Random;
+import journal.io.api.AbstractJournalTest;
+import journal.io.api.Journal;
+import journal.io.api.Location;
 
 /**
- * Test for verifying https://github.com/sbtourist/Journal.IO/issues/39
+ * Test for verifying https://github.com/sbtourist/Journal.IO/issues/39 Please
+ * note the 1MB journal db size and the 10K batch size.
  *
- * Please note the 1MB journal db size and the 10K batch size.
- *
- * User: sebastian stoll
- * Date: 2013-08-01
+ * @author sebastian stoll
  */
-public class CompactionRedoTest extends AbstractJournalTest {
+public class Issue39Test extends AbstractJournalTest {
 
     @Test
     public void testCompactionAndRedo() {
@@ -27,7 +28,7 @@ public class CompactionRedoTest extends AbstractJournalTest {
 
             //redo and delete all locations
             Iterable<Location> locations = journal.redo();
-            for(Location location: locations) {
+            for (Location location : locations) {
                 journal.delete(location);
             }
 
@@ -41,7 +42,7 @@ public class CompactionRedoTest extends AbstractJournalTest {
 
             //redo and read the journal -> will fail here
             locations = journal.redo();
-            for(Location location: locations) {
+            for (Location location : locations) {
                 journal.read(location, Journal.ReadType.SYNC);
             }
         } catch (Exception e) {
@@ -58,9 +59,8 @@ public class CompactionRedoTest extends AbstractJournalTest {
         return true;
     }
 
-
     private void writeData(Journal journal, byte[] data, int iterations) throws Exception {
-        for(int i = 0; i < iterations; i++) {
+        for (int i = 0; i < iterations; i++) {
             journal.write(data, Journal.WriteType.SYNC);
         }
     }
@@ -69,10 +69,9 @@ public class CompactionRedoTest extends AbstractJournalTest {
         StringBuffer buffer = new StringBuffer();
         char[] chars = "abcdefghijklmnopqrstuvwxyz".toCharArray();
         Random rnd = new Random();
-        for(int i = 0; i < fixtureLength; i++ ) {
+        for (int i = 0; i < fixtureLength; i++) {
             buffer.append(chars[rnd.nextInt(26)]);
         }
         return buffer.toString().getBytes();
     }
-
 }
