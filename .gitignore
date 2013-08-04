@@ -3,3 +3,5 @@ nbactions.xml
 .classpath
 .project
 .settings
+.idea/
+*.iml
