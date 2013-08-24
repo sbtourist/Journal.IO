@@ -37,85 +37,137 @@ public class JournalBuilder {
     private ReplicationTarget replicationTarget;
     private Executor writer;
 
-    private JournalBuilder(final File directory) {
-        //Checks directory exists and is a directory
-        //Also ensures current user has write access
+    private JournalBuilder(File directory) {
+        // Checks directory exists and is a directory
+        // Also ensures current user has write access
         if (!directory.exists()) {
-            throw new IllegalArgumentException("<"+directory+"> does not exist");
+            throw new IllegalArgumentException("<" + directory + "> does not exist");
         }
         if (!directory.isDirectory()) {
-            throw new IllegalArgumentException("<"+directory+"> is not a directory");
+            throw new IllegalArgumentException("<" + directory + "> is not a directory");
         }
         if (!directory.canWrite()) {
-            throw new IllegalArgumentException("Cannot write to main directory <"+directory+">");
+            throw new IllegalArgumentException("Cannot write to main directory <" + directory + ">");
         }
 
         this.directory = directory;
     }
 
-    public JournalBuilder setArchived(final File to) {
+    /**
+     * Set the directory used to archive cleaned up log files, also enabling
+     * archiving.
+     */
+    public JournalBuilder setArchived(File to) {
+        if (!to.exists()) {
+            throw new IllegalArgumentException("<" + to + "> does not exist");
+        }
+        if (!to.isDirectory()) {
+            throw new IllegalArgumentException("<" + to + "> is not a directory");
+        }
         this.directoryArchive = to;
         return this;
     }
 
-    public JournalBuilder setChecksum(final Boolean checksum) {
+    /**
+     * Set true to enable records checksum, false otherwise.
+     */
+    public JournalBuilder setChecksum(Boolean checksum) {
         this.checksum = checksum;
         return this;
     }
 
-    public JournalBuilder setDisposeInterval(final Long disposeInterval) {
+    /**
+     * Set the milliseconds interval for resources disposal: i.e., un-accessed
+     * files will be closed.
+     */
+    public JournalBuilder setDisposeInterval(Long disposeInterval) {
         this.disposeInterval = disposeInterval;
         return this;
     }
 
-    public JournalBuilder setDisposer(final ScheduledExecutorService disposer) {
-      this.disposer = disposer;
-      return this;
+    /**
+     * Set the ScheduledExecutorService to use for internal resources disposing.
+     *
+     * Important note: the provided ScheduledExecutorService must be manually
+     * closed.
+     */
+    public JournalBuilder setDisposer(ScheduledExecutorService disposer) {
+        this.disposer = disposer;
+        return this;
     }
 
-    public JournalBuilder setFilePrefix(final String filePrefix) {
+    /**
+     * Set the prefix for log files.
+     */
+    public JournalBuilder setFilePrefix(String filePrefix) {
         this.filePrefix = filePrefix;
         return this;
     }
 
-    public JournalBuilder setFileSuffix(final String fileSuffix) {
+    /**
+     * Set the suffix for log files.
+     */
+    public JournalBuilder setFileSuffix(String fileSuffix) {
         this.fileSuffix = fileSuffix;
         return this;
     }
 
-    public JournalBuilder setMaxFileLength(final Integer maxFileLength) {
+    /**
+     * Set the max length of each log file.
+     */
+    public JournalBuilder setMaxFileLength(Integer maxFileLength) {
         this.maxFileLength = maxFileLength;
         return this;
     }
 
-    public JournalBuilder setMaxWriteBatchSize(final Integer maxWriteBatchSize) {
+    /**
+     * Set the max size in bytes of the write batch: must always be equal or
+     * less than the max file length.
+     */
+    public JournalBuilder setMaxWriteBatchSize(Integer maxWriteBatchSize) {
         this.maxWriteBatchSize = maxWriteBatchSize;
         return this;
     }
 
-    public JournalBuilder setPhysicalSync(final Boolean physicalSync) {
+    /**
+     * Set true if every disk write must be followed by a physical disk sync,
+     * synchronizing file descriptor properties and flushing hardware buffers,
+     * false otherwise.
+     */
+    public JournalBuilder setPhysicalSync(Boolean physicalSync) {
         this.physicalSync = physicalSync;
         return this;
     }
 
-    public JournalBuilder setRecoveryErrorHandler(final RecoveryErrorHandler recoveryErrorHandler) {
+    /**
+     * Set the RecoveryErrorHandler to invoke in case of checksum errors.
+     */
+    public JournalBuilder setRecoveryErrorHandler(RecoveryErrorHandler recoveryErrorHandler) {
         this.recoveryErrorHandler = recoveryErrorHandler;
         return this;
     }
 
-    public JournalBuilder setReplicationTarget(final ReplicationTarget replicationTarget) {
+    /**
+     * Set the {@link ReplicationTarget} to replicate batch writes to.
+     */
+    public JournalBuilder setReplicationTarget(ReplicationTarget replicationTarget) {
         this.replicationTarget = replicationTarget;
         return this;
     }
 
-    public JournalBuilder setWriter(final Executor writer) {
+    /**
+     * Set the Executor to use for writing new record entries.
+     *
+     * Important note: the provided Executor must be manually closed.
+     */
+    public JournalBuilder setWriter(Executor writer) {
         this.writer = writer;
         return this;
     }
 
     /**
      * @return a configured and opened {@link Journal}
-     * @throws IOException 
+     * @throws IOException
      */
     public Journal open() throws IOException {
         final Journal journal = new Journal();
@@ -130,10 +182,16 @@ public class JournalBuilder {
         if (this.disposeInterval != null) {
             journal.setDisposeInterval(this.disposeInterval);
         }
-        journal.setDisposer(this.disposer);
-        journal.setFilePrefix(this.filePrefix);
-        journal.setFileSuffix(this.fileSuffix);
-        if (this.maxFileLength  != null) {
+        if (this.disposer != null) {
+            journal.setDisposer(this.disposer);
+        }
+        if (this.filePrefix != null) {
+            journal.setFilePrefix(this.filePrefix);
+        }
+        if (this.fileSuffix != null) {
+            journal.setFileSuffix(this.fileSuffix);
+        }
+        if (this.maxFileLength != null) {
             journal.setMaxFileLength(this.maxFileLength);
         }
         if (this.maxWriteBatchSize != null) {
@@ -142,19 +200,25 @@ public class JournalBuilder {
         if (this.physicalSync != null) {
             journal.setPhysicalSync(this.physicalSync);
         }
-        journal.setRecoveryErrorHandler(this.recoveryErrorHandler);
-        journal.setReplicationTarget(this.replicationTarget);
-        journal.setWriter(this.writer);
+        if (this.recoveryErrorHandler != null) {
+            journal.setRecoveryErrorHandler(this.recoveryErrorHandler);
+        }
+        if (this.replicationTarget != null) {
+            journal.setReplicationTarget(this.replicationTarget);
+        }
+        if (this.writer != null) {
+            journal.setWriter(this.writer);
+        }
         journal.open();
         return journal;
     }
 
-  /**
-   * @param directory
-   * @return a {@link JournalBuilder} using {@code directory} as base directory
-   */
-  public static JournalBuilder of(final File directory) {
-      return new JournalBuilder(directory);
-  }
-
+    /**
+     * @param directory
+     * @return a {@link JournalBuilder} using {@code directory} as base
+     * directory
+     */
+    public static JournalBuilder of(final File directory) {
+        return new JournalBuilder(directory);
+    }
 }
