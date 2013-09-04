@@ -286,6 +286,23 @@ public class Journal {
     }
 
     /**
+     * Truncate the journal, removing all log files. Please note truncate 
+     * requires the journal to be closed.
+     *
+     * @throws IOException
+     * @throws OpenJournalException
+     */
+    public synchronized void truncate() throws OpenJournalException, IOException {
+        if (!opened) {
+            for (DataFile file : dataFiles.values()) {
+                removeDataFile(file);
+            }
+        } else {
+            throw new OpenJournalException("The journal is open! The journal must be closed to be truncated.");
+        }
+    }
+
+    /**
      * Read the record stored at the given {@link Location}, either by syncing
      * with the disk state (if {@code ReadType.SYNC}) or by taking advantage of
      * speculative disk reads (if {@code ReadType.ASYNC}); the latter is faster,
