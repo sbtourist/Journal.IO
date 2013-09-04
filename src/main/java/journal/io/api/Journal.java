@@ -202,7 +202,8 @@ public class Journal {
                 }
             }
             lastAppendLocation = recoveryCheck();
-        } else {
+        }
+        if (lastAppendLocation == null) {
             lastAppendLocation = new Location(1, PRE_START_POINTER);
         }
     }
@@ -286,7 +287,7 @@ public class Journal {
     }
 
     /**
-     * Truncate the journal, removing all log files. Please note truncate 
+     * Truncate the journal, removing all log files. Please note truncate
      * requires the journal to be closed.
      *
      * @throws IOException
@@ -844,9 +845,9 @@ public class Journal {
     private Location recoveryCheck() throws IOException {
         List<Location> checksummedLocations = new LinkedList<Location>();
         Location currentBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
-        Location currentLocation = currentBatch;
         Location lastBatch = currentBatch;
         while (currentBatch != null) {
+            Location currentLocation = currentBatch;
             hints.put(currentBatch, currentBatch.getThisFilePosition());
             if (isChecksum()) {
                 ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
@@ -875,8 +876,9 @@ public class Journal {
                 currentBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
             }
         }
+        // Go through records on the last batch to get the last one:
         Location lastRecord = lastBatch;
-        while (true) {
+        while (lastRecord != null) {
             Location next = goToNextLocation(lastRecord, Location.ANY_RECORD_TYPE, false);
             if (next != null) {
                 lastRecord = next;
