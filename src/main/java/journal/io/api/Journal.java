@@ -827,6 +827,7 @@ public class Journal {
     private Location recoveryCheck() throws IOException {
         List<Location> checksummedLocations = new LinkedList<Location>();
         Location currentBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
+        Location currentLocation = currentBatch;
         Location lastBatch = currentBatch;
         while (currentBatch != null) {
             hints.put(currentBatch, currentBatch.getThisFilePosition());
@@ -837,15 +838,18 @@ public class Journal {
                 long expectedChecksum = currentBatchBuffer.getLong();
                 checksummedLocations.clear();
                 while (nextLocation != null && nextLocation.getType() != Location.BATCH_CONTROL_RECORD_TYPE) {
+                    assert currentLocation.compareTo(nextLocation) < 0;
                     byte data[] = accessor.readLocation(nextLocation, false);
                     actualChecksum.update(data, 0, data.length);
                     checksummedLocations.add(nextLocation);
+                    currentLocation = nextLocation;
                     nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, true);
                 }
                 if (expectedChecksum != actualChecksum.getValue()) {
                     recoveryErrorHandler.onError(this, checksummedLocations);
                 }
                 if (nextLocation != null) {
+                    assert currentLocation.compareTo(nextLocation) < 0;
                     lastBatch = nextLocation;
                 }
                 currentBatch = nextLocation;
@@ -854,16 +858,16 @@ public class Journal {
                 currentBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
             }
         }
-        Location currentUserRecord = lastBatch;
+        Location lastRecord = lastBatch;
         while (true) {
-            Location next = goToNextLocation(currentUserRecord, Location.USER_RECORD_TYPE, false);
+            Location next = goToNextLocation(lastRecord, Location.ANY_RECORD_TYPE, false);
             if (next != null) {
-                currentUserRecord = next;
+                lastRecord = next;
             } else {
                 break;
             }
         }
-        return currentUserRecord;
+        return lastRecord;
     }
 
     public static enum ReadType {
