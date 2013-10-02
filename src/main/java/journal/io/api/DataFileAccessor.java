@@ -86,6 +86,17 @@ class DataFileAccessor {
         }
     }
 
+    void deleteContentAfterLocation(Location location) throws IOException {
+        RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), location.getDataFileId());
+        if (seekToLocation(raf, location, false)) {
+            raf.setLength(raf.getFilePointer());
+            IOHelper.sync(raf.getFD());
+            journal.getCurrentWriteDataFile().setLength((int) raf.getFilePointer());
+        } else {
+            throw new IOException("Cannot find location: " + location);
+        }
+    }
+
     byte[] readLocation(Location location, boolean sync) throws IOException {
         if (location.getData() != null && !sync) {
             return location.getData();

@@ -13,8 +13,16 @@
  */
 package journal.io.api;
 
+import journal.io.util.IOHelper;
 import org.junit.Test;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.RandomAccessFile;
+import java.nio.CharBuffer;
+
 import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 /**
  * @author Sergio Bossa
@@ -132,6 +140,60 @@ public class RecoveryTest extends AbstractJournalTest {
         } finally {
             newJournal.close();
         }
+    }
+
+    @Test
+    public void testOpenNotCompletedJournal() throws Exception {
+        int iterations = 10;
+        try {
+            for (int i = 0; i < iterations; i++) {
+                journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
+            }
+        } finally {
+            journal.close();
+        }
+        deleteFewLastBytes(dir);
+
+        Journal newJournal = new Journal();
+        try {
+            initJournal(newJournal);
+            verifyEqualsData(newJournal, iterations-1);
+            newJournal.write(new String("DATA" + (iterations-1)).getBytes("UTF-8"), Journal.WriteType.SYNC);
+        } finally {
+            newJournal.close();
+        }
+
+        newJournal = new Journal();
+        try {
+            initJournal(newJournal);
+            verifyEqualsData(newJournal, iterations);
+        } finally {
+            newJournal.close();
+        }
+    }
+
+    private void deleteFewLastBytes(File journalDir) throws Exception {
+        RandomAccessFile file = new RandomAccessFile(new File(journalDir, "db-1.log"), "rw");
+        try {
+            file.setLength(file.length()-1);
+        } finally {
+            file.close();
+        }
+    }
+
+    private void initJournal(Journal journal) throws Exception {
+        journal.setDirectory(dir);
+        configure(journal);
+        journal.open();
+    }
+
+    private void verifyEqualsData(Journal journal, int expectedCount) throws Exception {
+        int i = 0;
+        for (Location location : journal.redo()) {
+            byte[] buffer = journal.read(location, Journal.ReadType.ASYNC);
+            assertEquals("DATA" + i++, new String(buffer, "UTF-8"));
+        }
+        assertEquals(expectedCount, i);
     }
 
     @Override
