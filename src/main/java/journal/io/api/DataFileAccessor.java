@@ -13,6 +13,7 @@
  */
 package journal.io.api;
 
+import java.io.EOFException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -275,9 +276,16 @@ class DataFileAccessor {
     private boolean isIntoNextLocation(RandomAccessFile raf, Location source) throws CompactedDataFileException, IOException {
         int generation = journal.getDataFile(source.getDataFileId()).getDataFileGeneration();
         long position = raf.getFilePointer();
-        return source.getDataFileGeneration() == generation
-                && source.getNextFilePosition() == position
-                && raf.length() - position > Journal.RECORD_HEADER_SIZE;
+        if (source.getDataFileGeneration() == generation && source.getNextFilePosition() == position) {
+            if (raf.length() - position > Journal.RECORD_HEADER_SIZE) {
+                return true;
+            } else if (raf.length() - position <= 0) {
+                return false;
+            } else {
+                throw new EOFException("Unexpected EOF: Not completed header");
+            }
+        } else
+            return false;
     }
 
     private boolean seekToLocation(RandomAccessFile raf, Location destination, boolean fillLocation) throws IOException {

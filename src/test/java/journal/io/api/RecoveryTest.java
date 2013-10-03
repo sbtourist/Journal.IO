@@ -13,15 +13,11 @@
  */
 package journal.io.api;
 
-import journal.io.util.IOHelper;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.nio.CharBuffer;
 
-import static org.junit.Assert.*;
 import static org.junit.Assert.assertEquals;
 
 /**
@@ -143,8 +139,27 @@ public class RecoveryTest extends AbstractJournalTest {
     }
 
     @Test
-    public void testOpenNotCompletedJournal() throws Exception {
-        int iterations = 10;
+    public void testOpenLastEntrySmallerThanSize() throws Exception {
+        checkOpenNotCompleted(10, 1);
+    }
+
+    @Test
+    public void testOpenLastEntrySmallerThanSizeOnlyOne() throws Exception {
+        checkOpenNotCompleted(1, 1);
+    }
+
+    @Test
+    public void testOpenLastEntryHeaderNotCompleted() throws Exception {
+        checkOpenNotCompleted(10, 6);
+    }
+
+    @Test
+    public void testOpenLastEntryHeaderNotCompletedOnlyOne() throws Exception {
+        checkOpenNotCompleted(1, 6);
+    }
+
+
+    private void checkOpenNotCompleted(int iterations, int bytesToDelete) throws Exception {
         try {
             for (int i = 0; i < iterations; i++) {
                 journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
@@ -152,7 +167,7 @@ public class RecoveryTest extends AbstractJournalTest {
         } finally {
             journal.close();
         }
-        deleteFewLastBytes(dir);
+        deleteLastBytes(dir, bytesToDelete);
 
         Journal newJournal = new Journal();
         try {
@@ -172,10 +187,10 @@ public class RecoveryTest extends AbstractJournalTest {
         }
     }
 
-    private void deleteFewLastBytes(File journalDir) throws Exception {
+    private void deleteLastBytes(File journalDir, int count) throws Exception {
         RandomAccessFile file = new RandomAccessFile(new File(journalDir, "db-1.log"), "rw");
         try {
-            file.setLength(file.length()-1);
+            file.setLength(file.length()-count);
         } finally {
             file.close();
         }
@@ -196,10 +211,33 @@ public class RecoveryTest extends AbstractJournalTest {
         assertEquals(expectedCount, i);
     }
 
+    private char[] readFile(File file) throws IOException {
+        CharBuffer buf = CharBuffer.allocate((int) file.length());
+        FileReader rdr = new FileReader(file);
+        try {
+            rdr.read(buf);
+            return buf.array();
+        } finally {
+            rdr.close();
+        }
+    }
+
+    private String toHex(char[] arr) {
+        StringBuilder sb = new StringBuilder();
+        for (char b : arr) {
+            if (Character.isLetterOrDigit(b))
+                sb.append(b + " ");
+            else
+                sb.append(String.format("%02X ", (byte)b));
+        }
+        return sb.toString();
+    }
+
     @Override
     protected boolean configure(Journal journal) {
         journal.setMaxFileLength(1024 * 100);
         journal.setMaxWriteBatchSize(1024);
+        journal.setRecoveryErrorHandler(RecoveryErrorHandler.IGNORE);
         return true;
     }
 }
