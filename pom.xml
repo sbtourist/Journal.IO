@@ -19,9 +19,9 @@
 
     <modelVersion>4.0.0</modelVersion>
     <parent>
-      <groupId>org.sonatype.oss</groupId>
-      <artifactId>oss-parent</artifactId>
-      <version>7</version>
+        <groupId>org.sonatype.oss</groupId>
+        <artifactId>oss-parent</artifactId>
+        <version>7</version>
     </parent>
 
     <groupId>com.github.sbtourist</groupId>
@@ -48,17 +48,17 @@
         </developer>
     </developers>
     <scm>
-      <connection>scm:git:git@github.com:sbtourist/Journal.IO.git</connection>
-      <developerConnection>scm:git:git@github.com:sbtourist/Journal.IO.git</developerConnection>
-      <url>git@github.com:sbtourist/Journal.IO.git</url>
+        <connection>scm:git:git@github.com:sbtourist/Journal.IO.git</connection>
+        <developerConnection>scm:git:git@github.com:sbtourist/Journal.IO.git</developerConnection>
+        <url>git@github.com:sbtourist/Journal.IO.git</url>
     </scm>
     <url>https://github.com/sbtourist/Journal.IO</url>
     <licenses>
-      <license>
-        <name>The Apache Software License, Version 2.0</name>
-        <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-        <distribution>repo</distribution>
-      </license>
+        <license>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
     </licenses>
 
     <build>
@@ -113,9 +113,15 @@
     </build>
     <dependencies>
         <dependency>
+            <groupId>com.carrotsearch</groupId>
+            <artifactId>junit-benchmarks</artifactId>
+            <version>0.7.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>4.8.2</version>
+            <version>4.11</version>
             <scope>test</scope>
         </dependency>
         <dependency>

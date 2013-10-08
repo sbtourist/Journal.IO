@@ -31,7 +31,9 @@ import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CountDownLatch;
@@ -95,7 +97,7 @@ public class Journal {
     //
     private final ConcurrentNavigableMap<Integer, DataFile> dataFiles = new ConcurrentSkipListMap<Integer, DataFile>();
     private final ConcurrentNavigableMap<Location, Long> hints = new ConcurrentSkipListMap<Location, Long>();
-    private final ConcurrentNavigableMap<Location, WriteCommand> inflightWrites = new ConcurrentSkipListMap<Location, WriteCommand>();
+    private final ConcurrentMap<Location, WriteCommand> inflightWrites = new ConcurrentHashMap<Location, WriteCommand>();
     private final AtomicLong totalLength = new AtomicLong();
     //
     private volatile Location lastAppendLocation;
@@ -707,7 +709,7 @@ public class Journal {
         return hints;
     }
 
-    ConcurrentNavigableMap<Location, WriteCommand> getInflightWrites() {
+    ConcurrentMap<Location, WriteCommand> getInflightWrites() {
         return inflightWrites;
     }
 
