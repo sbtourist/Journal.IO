@@ -13,10 +13,7 @@
  */
 package journal.io.api;
 
-import java.io.File;
-import java.io.FilenameFilter;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.Arrays;
@@ -852,25 +849,33 @@ public class Journal {
             if (isChecksum()) {
                 ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
                 Checksum actualChecksum = new Adler32();
-                Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, true);
-                long expectedChecksum = currentBatchBuffer.getLong();
-                checksummedLocations.clear();
-                while (nextLocation != null && nextLocation.getType() != Location.BATCH_CONTROL_RECORD_TYPE) {
-                    assert currentLocation.compareTo(nextLocation) < 0;
-                    byte data[] = accessor.readLocation(nextLocation, false);
-                    actualChecksum.update(data, 0, data.length);
-                    checksummedLocations.add(nextLocation);
-                    currentLocation = nextLocation;
-                    nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, true);
+                try {
+                    Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, true);
+                    long expectedChecksum = currentBatchBuffer.getLong();
+                    checksummedLocations.clear();
+                    while (nextLocation != null && nextLocation.getType() != Location.BATCH_CONTROL_RECORD_TYPE) {
+                        assert currentLocation.compareTo(nextLocation) < 0;
+                        byte data[] = accessor.readLocation(nextLocation, false);
+                        actualChecksum.update(data, 0, data.length);
+                        checksummedLocations.add(nextLocation);
+                        currentLocation = nextLocation;
+                        nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, true);
+                    }
+                    if (expectedChecksum != actualChecksum.getValue()) {
+                        recoveryErrorHandler.onError(this, checksummedLocations);
+                    }
+                    if (nextLocation != null) {
+                        assert currentLocation.compareTo(nextLocation) < 0;
+                        lastBatch = nextLocation;
+                    }
+                    currentBatch = nextLocation;
+                } catch (EOFException ex) {
+                    accessor.deleteContentAfterLocation(currentBatch);
+                    lastBatch = new Location();
+                    lastBatch.setDataFileId(currentBatch.getDataFileId());
+                    lastBatch.setPointer(currentBatch.getPointer()-1);
+                    currentBatch = null;
                 }
-                if (expectedChecksum != actualChecksum.getValue()) {
-                    recoveryErrorHandler.onError(this, checksummedLocations);
-                }
-                if (nextLocation != null) {
-                    assert currentLocation.compareTo(nextLocation) < 0;
-                    lastBatch = nextLocation;
-                }
-                currentBatch = nextLocation;
             } else {
                 lastBatch = currentBatch;
                 currentBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);

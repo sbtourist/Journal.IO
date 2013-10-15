@@ -13,6 +13,7 @@
  */
 package journal.io.api;
 
+import java.io.EOFException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -83,6 +84,17 @@ class DataFileAccessor {
         } finally {
             threadLock.unlock();
             shared.unlock();
+        }
+    }
+
+    void deleteContentAfterLocation(Location location) throws IOException {
+        RandomAccessFile raf = getOrCreateRaf(Thread.currentThread(), location.getDataFileId());
+        if (seekToLocation(raf, location, false)) {
+            raf.setLength(raf.getFilePointer());
+            IOHelper.sync(raf.getFD());
+            journal.getCurrentWriteDataFile().setLength((int) raf.getFilePointer());
+        } else {
+            throw new IOException("Cannot find location: " + location);
         }
     }
 
@@ -170,6 +182,7 @@ class DataFileAccessor {
                             next.setPointer(raf.readInt());
                             next.setSize(raf.readInt());
                             next.setType(raf.readByte());
+                            verifySize(raf, next.getSize());
                             if (type != Location.ANY_RECORD_TYPE && next.getType() != type) {
                                 IOHelper.skipBytes(raf, next.getSize() - Journal.RECORD_HEADER_SIZE);
                             } else {
@@ -199,6 +212,13 @@ class DataFileAccessor {
                 shared.unlock();
             }
         }
+    }
+
+    private void verifySize(RandomAccessFile raf, int size) throws IOException {
+        if (size < Journal.RECORD_HEADER_SIZE)
+            throw new EOFException("Size in header is lower than minimal size");
+        else if (raf.length() - raf.getFilePointer() < size - Journal.RECORD_HEADER_SIZE)
+            throw new EOFException("Record is out of file");
     }
 
     void dispose(DataFile dataFile) {
@@ -264,9 +284,16 @@ class DataFileAccessor {
     private boolean isIntoNextLocation(RandomAccessFile raf, Location source) throws CompactedDataFileException, IOException {
         int generation = journal.getDataFile(source.getDataFileId()).getDataFileGeneration();
         long position = raf.getFilePointer();
-        return source.getDataFileGeneration() == generation
-                && source.getNextFilePosition() == position
-                && raf.length() - position > Journal.RECORD_HEADER_SIZE;
+        if (source.getDataFileGeneration() == generation && source.getNextFilePosition() == position) {
+            if (raf.length() - position > Journal.RECORD_HEADER_SIZE) {
+                return true;
+            } else if (raf.length() - position <= 0) {
+                return false;
+            } else {
+                throw new EOFException("Unexpected EOF: Not completed header");
+            }
+        } else
+            return false;
     }
 
     private boolean seekToLocation(RandomAccessFile raf, Location destination, boolean fillLocation) throws IOException {
