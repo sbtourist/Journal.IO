@@ -182,6 +182,7 @@ class DataFileAccessor {
                             next.setPointer(raf.readInt());
                             next.setSize(raf.readInt());
                             next.setType(raf.readByte());
+                            verifySize(raf, next.getSize());
                             if (type != Location.ANY_RECORD_TYPE && next.getType() != type) {
                                 IOHelper.skipBytes(raf, next.getSize() - Journal.RECORD_HEADER_SIZE);
                             } else {
@@ -211,6 +212,13 @@ class DataFileAccessor {
                 shared.unlock();
             }
         }
+    }
+
+    private void verifySize(RandomAccessFile raf, int size) throws IOException {
+        if (size < Journal.RECORD_HEADER_SIZE)
+            throw new EOFException("Size in header is lower than minimal size");
+        else if (raf.length() - raf.getFilePointer() < size - Journal.RECORD_HEADER_SIZE)
+            throw new EOFException("Record is out of file");
     }
 
     void dispose(DataFile dataFile) {

@@ -158,6 +158,15 @@ public class RecoveryTest extends AbstractJournalTest {
         checkOpenNotCompleted(1, 6);
     }
 
+    @Test
+    public void testOpenWithAdditionalBytes() throws Exception {
+        checkOpenNotCompleted(1, -1);
+    }
+
+    @Test
+    public void testOpenWithRecordOutOfFile() throws Exception {
+        checkOpenNotCompleted(1, -10);
+    }
 
     private void checkOpenNotCompleted(int iterations, int bytesToDelete) throws Exception {
         try {

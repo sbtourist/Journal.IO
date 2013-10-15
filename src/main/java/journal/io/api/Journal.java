@@ -870,11 +870,10 @@ public class Journal {
                     }
                     currentBatch = nextLocation;
                 } catch (EOFException ex) {
-                    accessor.deleteContentAfterLocation(currentLocation);
+                    accessor.deleteContentAfterLocation(currentBatch);
                     lastBatch = new Location();
-                    lastBatch.setDataFileId(currentLocation.getDataFileId());
-                    lastBatch.setPointer(currentLocation.getPointer()-1);
-                    lastBatch.setNextFilePosition(currentLocation.getThisFilePosition());
+                    lastBatch.setDataFileId(currentBatch.getDataFileId());
+                    lastBatch.setPointer(currentBatch.getPointer()-1);
                     currentBatch = null;
                 }
             } else {
