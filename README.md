@@ -1,4 +1,4 @@
-# Journal.IO 1.3
+# Journal.IO 1.4
 
 Journal.IO is a lightweight, fast and easy-to-use journal storage implementation based on append-only rotating logs and checksummed variable-length records, 
 supporting concurrent reads and writes, dynamic batching, tunable durability and data compaction.
@@ -10,28 +10,23 @@ in order to provide new features and fixes with a faster development and release
 
 APIs are very simple and intuitive.
 
-First, create and configure the journal:
+First, configure and open the journal:
 
-    Journal journal = new Journal();
-    journal.setDirectory(JOURNAL_DIR);
+    Journal journal = JournalBuilder.of(JOURNAL_DIR).open();
 
-Then, open the journal:
-
-    journal.open();
-
-And write some records:
+Write some records:
 
     for (int i = 0; i < writes; i++) {
         boolean sync = i % 2 == 0 ? true : false;
         journal.write(new String("DATA" + i), WriteType.SYNC);
     }
 
-You can dynamically write either in async (_WriteType.ASYNC_) or sync mode (_WriteType.SYNC_): 
+You can dynamically write either in async (WriteType.ASYNC) or sync mode (WriteType.SYNC): 
 in async mode, writes are batched until either the max batch size is reached, 
 the journal is manually synced or closed, or a sync write is executed.
 
-The, forward-replay the log by going through the Journal "redo" iterable, obtaining record locations by reading them either in
-async (_ReadType.ASYNC_) or sync mode (_ReadType.SYNC_): async mode takes advantage of speculative reads and so it's faster than sync mode, 
+Then, forward-replay the log by going through the Journal "redo" iterable, obtaining record locations by reading them either in
+async (ReadType.ASYNC) or sync mode (ReadType.SYNC): async mode takes advantage of speculative reads and so it's faster than sync mode, 
 which instead is slower but able to suddenly detect deleted records:
 
     for (Location location : journal.redo()) {
@@ -94,7 +89,7 @@ You can download Journal.IO via Maven repositories, here are the coordinates:
     <dependency>
         <groupId>com.github.sbtourist</groupId>
        <artifactId>journalio</artifactId>
-       <version>1.3</version>
+       <version>1.4</version>
     </dependency>
     
 ## Third Party Tools
