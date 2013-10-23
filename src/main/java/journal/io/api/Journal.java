@@ -834,14 +834,19 @@ public class Journal {
                 raf.close();
             }
         }
-        accessor.dispose(currentFile);
-        totalLength.addAndGet(-currentFile.getLength());
-        totalLength.addAndGet(tmpFile.getLength());
-        IOHelper.deleteFile(currentFile.getFile());
-        IOHelper.renameFile(tmpFile.getFile(), currentFile.getFile());
-        // Increment generation so that sequential reads from locations
-        // referring to a different generation will not be valid:
-        currentFile.incrementGeneration();
+        accessor.pause();
+        try {
+            accessor.dispose(currentFile);
+            totalLength.addAndGet(-currentFile.getLength());
+            totalLength.addAndGet(tmpFile.getLength());
+            IOHelper.deleteFile(currentFile.getFile());
+            IOHelper.renameFile(tmpFile.getFile(), currentFile.getFile());
+            // Increment generation so that sequential reads from locations
+            // referring to a different generation will not be valid:
+            currentFile.incrementGeneration();
+        } finally {
+            accessor.resume();
+        }
     }
 
     private Location recoveryCheck() throws IOException {
