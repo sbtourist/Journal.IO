@@ -17,7 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import journal.io.util.IOHelper;
 
 /**
@@ -29,14 +29,14 @@ class DataFile implements Comparable<DataFile> {
     private final File file;
     private final Integer dataFileId;
     private volatile Integer dataFileGeneration;
-    private final AtomicInteger length;
+    private final AtomicLong length;
     private volatile DataFile next;
 
     DataFile(File file, int id) {
         this.file = file;
         this.dataFileId = id;
         this.dataFileGeneration = 0;
-        this.length = new AtomicInteger((int) (file.exists() ? file.length() : 0));
+        this.length = new AtomicLong((file.exists() ? file.length() : 0));
     }
 
     File getFile() {
@@ -63,11 +63,11 @@ class DataFile implements Comparable<DataFile> {
         this.next = next;
     }
 
-    int getLength() {
+    long getLength() {
         return this.length.get();
     }
 
-    void setLength(int length) {
+    void setLength(long length) {
         this.length.set(length);
     }
 
@@ -105,7 +105,7 @@ class DataFile implements Comparable<DataFile> {
             if (raf.read(magic) == Journal.MAGIC_SIZE && Arrays.equals(magic, Journal.MAGIC_STRING)) {
                 int version = raf.readInt();
                 if (version != Journal.STORAGE_VERSION) {
-                    throw new IOException("Incompatible storage version, found: " + version + ", required: " + Journal.STORAGE_VERSION);
+                    throw new IllegalStateException("Incompatible storage version, found: " + version + ", required: " + Journal.STORAGE_VERSION);
                 }
             } else {
                 throw new IOException("Incompatible magic string!");

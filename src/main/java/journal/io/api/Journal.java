@@ -23,14 +23,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Queue;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
@@ -193,7 +191,6 @@ public class Journal {
                     String name = file.getName();
                     int index = Integer.parseInt(name.substring(filePrefix.length(), name.length() - fileSuffix.length()));
                     DataFile dataFile = new DataFile(file, index);
-                    dataFile.verifyHeader();
                     if (!dataFiles.isEmpty()) {
                         dataFiles.lastEntry().getValue().setNext(dataFile);
                     }
@@ -437,8 +434,8 @@ public class Journal {
      *
      * @return
      */
-    public Set<File> getFiles() {
-        Set<File> result = new HashSet<File>();
+    public List<File> getFiles() {
+        List<File> result = new LinkedList<File>();
         for (DataFile dataFile : dataFiles.values()) {
             result.add(dataFile.getFile());
         }
@@ -851,36 +848,78 @@ public class Journal {
 
     private Location recoveryCheck() throws IOException {
         List<Location> checksummedLocations = new LinkedList<Location>();
-        Location currentBatch = goToFirstLocation(dataFiles.firstEntry().getValue(), Location.BATCH_CONTROL_RECORD_TYPE, false);
-        Location lastBatch = currentBatch;
-        while (currentBatch != null) {
-            Location currentLocation = currentBatch;
-            hints.put(currentBatch, currentBatch.getThisFilePosition());
-            if (isChecksum()) {
-                ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
-                Checksum actualChecksum = new Adler32();
-                Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, true);
-                long expectedChecksum = currentBatchBuffer.getLong();
-                checksummedLocations.clear();
-                while (nextLocation != null && nextLocation.getType() != Location.BATCH_CONTROL_RECORD_TYPE) {
-                    assert currentLocation.compareTo(nextLocation) < 0;
-                    byte data[] = accessor.readLocation(nextLocation, false);
-                    actualChecksum.update(data, 0, data.length);
-                    checksummedLocations.add(nextLocation);
-                    currentLocation = nextLocation;
-                    nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, true);
+        DataFile currentFile = dataFiles.firstEntry().getValue();
+        Location currentBatch = null;
+        Location lastBatch = null;
+        while (currentFile != null) {
+            try {
+                currentFile.verifyHeader();
+            } catch (IOException ex) {
+                DataFile toDelete = currentFile;
+                currentFile = toDelete.getNext();
+                warn(ex, "Deleting data file: %s", toDelete);
+                removeDataFile(toDelete);
+                continue;
+            }
+            try {
+                currentBatch = goToFirstLocation(currentFile, Location.BATCH_CONTROL_RECORD_TYPE, false);
+                while (currentBatch != null) {
+                    try {
+                        Location currentLocation = currentBatch;
+                        hints.put(currentBatch, currentBatch.getThisFilePosition());
+                        if (isChecksum()) {
+                            ByteBuffer currentBatchBuffer = ByteBuffer.wrap(accessor.readLocation(currentBatch, false));
+                            Checksum actualChecksum = new Adler32();
+                            Location nextLocation = goToNextLocation(currentBatch, Location.ANY_RECORD_TYPE, false);
+                            long expectedChecksum = currentBatchBuffer.getLong();
+                            checksummedLocations.clear();
+                            while (nextLocation != null && nextLocation.getType() != Location.BATCH_CONTROL_RECORD_TYPE) {
+                                assert currentLocation.compareTo(nextLocation) < 0;
+                                byte data[] = accessor.readLocation(nextLocation, false);
+                                actualChecksum.update(data, 0, data.length);
+                                checksummedLocations.add(nextLocation);
+                                currentLocation = nextLocation;
+                                nextLocation = goToNextLocation(nextLocation, Location.ANY_RECORD_TYPE, false);
+                            }
+                            if (checksummedLocations.isEmpty()) {
+                                throw new IllegalStateException("Found empty batch!");
+                            }
+                            if (expectedChecksum != actualChecksum.getValue()) {
+                                recoveryErrorHandler.onError(this, checksummedLocations);
+                            }
+                            if (nextLocation != null) {
+                                assert currentLocation.compareTo(nextLocation) < 0;
+                            } else {
+                                currentFile = currentFile.getNext();
+                            }
+                            lastBatch = currentBatch;
+                            currentBatch = nextLocation;
+                        } else {
+                            lastBatch = currentBatch;
+                            currentBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, false);
+                            if (currentBatch == null) {
+                                currentFile = currentFile.getNext();
+                            }
+                        }
+                    } catch (Throwable ex) {
+                        warn(ex, "Corrupted data found, deleting data starting from location %s up to the end of the file.", currentBatch);
+                        accessor.deleteFromLocation(currentBatch);
+                        currentFile = currentFile.getNext();
+                        if (currentFile != null) {
+                            currentBatch = goToFirstLocation(currentFile, Location.BATCH_CONTROL_RECORD_TYPE, false);
+                        } else {
+                            currentBatch = null;
+                        }
+                    }
                 }
-                if (expectedChecksum != actualChecksum.getValue()) {
-                    recoveryErrorHandler.onError(this, checksummedLocations);
+            } catch (Throwable ex) {
+                if (currentBatch == null) {
+                    currentBatch = new Location(currentFile.getDataFileId(), 0);
+                    currentBatch.setThisFilePosition(Journal.FILE_HEADER_SIZE);
                 }
-                if (nextLocation != null) {
-                    assert currentLocation.compareTo(nextLocation) < 0;
-                    lastBatch = nextLocation;
-                }
-                currentBatch = nextLocation;
-            } else {
-                lastBatch = currentBatch;
-                currentBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, true);
+                currentFile = currentFile.getNext();
+                warn(ex, "Corrupted data found, deleting data starting from location %s up to the end of the file.", currentBatch);
+                accessor.deleteFromLocation(currentBatch);
             }
         }
         // Go through records on the last batch to get the last one:
@@ -913,7 +952,7 @@ public class Journal {
         private final DataFile dataFile;
         private final Queue<WriteCommand> writes = new ConcurrentLinkedQueue<WriteCommand>();
         private final CountDownLatch latch = new CountDownLatch(1);
-        private volatile int offset;
+        private volatile long offset;
         private volatile int pointer;
         private volatile int size;
 
@@ -932,7 +971,7 @@ public class Journal {
 
         boolean canBatch(WriteCommand write, int maxWriteBatchSize, int maxFileLength) throws IOException {
             int thisBatchSize = size + write.location.getSize();
-            int thisFileLength = offset + thisBatchSize;
+            long thisFileLength = offset + thisBatchSize;
             if (thisBatchSize > maxWriteBatchSize || thisFileLength > maxFileLength) {
                 return false;
             } else {
