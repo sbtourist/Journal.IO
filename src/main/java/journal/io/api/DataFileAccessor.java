@@ -16,6 +16,7 @@ package journal.io.api;
 import java.util.concurrent.locks.ReentrantLock;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -195,10 +196,15 @@ class DataFileAccessor {
                         if (hasRecordHeader(raf, raf.getFilePointer())) {
                             Location next = new Location(start.getDataFileId());
                             do {
+                                // Set this file pointer:
                                 next.setThisFilePosition(raf.getFilePointer());
-                                next.setPointer(raf.readInt());
-                                next.setSize(raf.readInt());
-                                next.setType(raf.readByte());
+                                // Advance and read header:
+                                ByteBuffer headerBuffer = ByteBuffer.allocate(Journal.RECORD_HEADER_SIZE);
+                                raf.getChannel().read(headerBuffer);
+                                headerBuffer.flip();
+                                next.setPointer(headerBuffer.getInt());
+                                next.setSize(headerBuffer.getInt());
+                                next.setType(headerBuffer.get());
                                 if (type != Location.ANY_RECORD_TYPE && next.getType() != type) {
                                     boolean skipped = skipLocationData(raf, next);
                                     assert skipped;
@@ -304,24 +310,31 @@ class DataFileAccessor {
     }
 
     private boolean seekToLocation(RandomAccessFile raf, Location destination, boolean fillLocation, boolean fillData) throws IOException {
+        // Recycled byte buffer header:
+        ByteBuffer headerBuffer = ByteBuffer.allocate(Journal.RECORD_HEADER_SIZE);
         // First try the next file position:
         long position = raf.getFilePointer();
         int pointer = -1;
         int size = -1;
         byte type = -1;
         if (hasRecordHeader(raf, position)) {
-            pointer = raf.readInt();
-            size = raf.readInt();
-            type = raf.readByte();
+            raf.getChannel().read(headerBuffer);
+            headerBuffer.flip();
+            pointer = headerBuffer.getInt();
+            size = headerBuffer.getInt();
+            type = headerBuffer.get();
         }
         // If pointer is wrong, seek by trying the saved file position:
         if (pointer != destination.getPointer()) {
             position = destination.getThisFilePosition();
             if (position != Location.NOT_SET && hasRecordHeader(raf, position)) {
                 raf.seek(position);
-                pointer = raf.readInt();
-                size = raf.readInt();
-                type = raf.readByte();
+                headerBuffer.rewind();
+                raf.getChannel().read(headerBuffer);
+                headerBuffer.flip();
+                pointer = headerBuffer.getInt();
+                size = headerBuffer.getInt();
+                type = headerBuffer.get();
             }
             // Else seek by using hints:
             if (pointer != destination.getPointer()) {
@@ -333,16 +346,22 @@ class DataFileAccessor {
                 }
                 raf.seek(position);
                 if (hasRecordHeader(raf, position)) {
-                    pointer = raf.readInt();
-                    size = raf.readInt();
-                    type = raf.readByte();
+                    headerBuffer.rewind();
+                    raf.getChannel().read(headerBuffer);
+                    headerBuffer.flip();
+                    pointer = headerBuffer.getInt();
+                    size = headerBuffer.getInt();
+                    type = headerBuffer.get();
                     while (pointer != destination.getPointer()) {
                         IOHelper.skipBytes(raf, size - Journal.RECORD_HEADER_SIZE);
                         position = raf.getFilePointer();
                         if (hasRecordHeader(raf, position)) {
-                            pointer = raf.readInt();
-                            size = raf.readInt();
-                            type = raf.readByte();
+                            headerBuffer.rewind();
+                            raf.getChannel().read(headerBuffer);
+                            headerBuffer.flip();
+                            pointer = headerBuffer.getInt();
+                            size = headerBuffer.getInt();
+                            type = headerBuffer.get();
                         } else {
                             return false;
                         }
@@ -440,7 +459,7 @@ class DataFileAccessor {
         } else if (remaining == 0) {
             return false;
         } else {
-            throw new IllegalStateException("Remaining file length doesn't fit a record header!");
+            throw new IllegalStateException("Remaining file length doesn't fit a record header at position: " + position);
         }
     }
 
