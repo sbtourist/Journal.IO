@@ -126,4 +126,6 @@ Journal.IO is based on the HawtJournal project, for original copyright note see:
 
 [Brian McCallister](https://twitter.com/brianm) (Contributor)
 
+[Sebastian Stoll](https://github.com/SebastianStoll) (Contributor)
+
 [Arek Burdach](https://github.com/arkadius) (Contributor)
