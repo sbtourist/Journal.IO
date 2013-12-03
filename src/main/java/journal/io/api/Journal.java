@@ -814,6 +814,7 @@ public class Journal {
                 currentFile.getDataFileId());
         tmpFile.writeHeader();
         RandomAccessFile raf = tmpFile.openRandomAccessFile();
+        accessor.pause();
         try {
             Location currentUserLocation = firstUserLocation;
             WriteBatch batch = new WriteBatch(tmpFile, 0);
@@ -824,15 +825,16 @@ public class Journal {
                 batch.appendBatch(write);
                 currentUserLocation = goToNextLocation(currentUserLocation, Location.USER_RECORD_TYPE, false);
             }
+            Location toRemove = new Location(currentFile.getDataFileId());
+            Location candidate = null;
+            while ((candidate = hints.higherKey(toRemove)) != null && candidate.getDataFileId() == toRemove.getDataFileId()) {
+                hints.remove(candidate);
+            }
+
             Location batchLocation = batch.perform(raf, true, true, null);
             hints.put(batchLocation, batchLocation.getThisFilePosition());
-        } finally {
-            if (raf != null) {
-                raf.close();
-            }
-        }
-        accessor.pause();
-        try {
+
+
             accessor.dispose(currentFile);
             totalLength.addAndGet(-currentFile.getLength());
             totalLength.addAndGet(tmpFile.getLength());
@@ -842,6 +844,9 @@ public class Journal {
             // referring to a different generation will not be valid:
             currentFile.incrementGeneration();
         } finally {
+            if (raf != null) {
+                raf.close();
+            }
             accessor.resume();
         }
     }
