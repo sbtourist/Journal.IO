@@ -889,38 +889,24 @@ public class Journal {
                             }
                             if (nextLocation != null) {
                                 assert currentLocation.compareTo(nextLocation) < 0;
-                            } else {
-                                currentFile = currentFile.getNext();
                             }
                             lastBatch = currentBatch;
                             currentBatch = nextLocation;
                         } else {
                             lastBatch = currentBatch;
                             currentBatch = goToNextLocation(currentBatch, Location.BATCH_CONTROL_RECORD_TYPE, false);
-                            if (currentBatch == null) {
-                                currentFile = currentFile.getNext();
-                            }
                         }
                     } catch (Throwable ex) {
                         warn(ex, "Corrupted data found, deleting data starting from location %s up to the end of the file.", currentBatch);
                         accessor.deleteFromLocation(currentBatch);
-                        currentFile = currentFile.getNext();
-                        if (currentFile != null) {
-                            currentBatch = goToFirstLocation(currentFile, Location.BATCH_CONTROL_RECORD_TYPE, false);
-                        } else {
-                            currentBatch = null;
-                        }
+                        break;
                     }
                 }
             } catch (Throwable ex) {
-                if (currentBatch == null) {
-                    currentBatch = new Location(currentFile.getDataFileId(), 0);
-                    currentBatch.setThisFilePosition(Journal.FILE_HEADER_SIZE);
-                }
-                currentFile = currentFile.getNext();
-                warn(ex, "Corrupted data found, deleting data starting from location %s up to the end of the file.", currentBatch);
-                accessor.deleteFromLocation(currentBatch);
+                warn(ex, "Corrupted data found while reading first batch location, deleting whole data file: %s", currentFile);
+                removeDataFile(currentFile);
             }
+            currentFile = currentFile.getNext();
         }
         // Go through records on the last batch to get the last one:
         Location lastRecord = lastBatch;
