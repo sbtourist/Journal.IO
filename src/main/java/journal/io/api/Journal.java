@@ -810,7 +810,7 @@ public class Journal {
 
     private void compactDataFile(DataFile currentFile, Location firstUserLocation) throws IOException {
         DataFile tmpFile = new DataFile(
-                new File(currentFile.getFile().getParent(), filePrefix + currentFile.getDataFileId() + ".tmp" + fileSuffix),
+                new File(currentFile.getFile().getParent(), filePrefix + currentFile.getDataFileId() + fileSuffix + ".tmp"),
                 currentFile.getDataFileId());
         tmpFile.writeHeader();
         RandomAccessFile raf = tmpFile.openRandomAccessFile();
