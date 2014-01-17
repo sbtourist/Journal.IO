@@ -338,6 +338,8 @@ class DataFileAccessor {
             }
             // Else seek by using hints:
             if (pointer != destination.getPointer()) {
+                // TODO: what if destination is a batch? 
+                // We have to first check for equality and then lower entry!
                 Entry<Location, Long> hint = journal.getHints().lowerEntry(destination);
                 if (hint != null && hint.getKey().getDataFileId() == destination.getDataFileId()) {
                     position = hint.getValue();
@@ -459,7 +461,16 @@ class DataFileAccessor {
         } else if (remaining == 0) {
             return false;
         } else {
-            throw new IllegalStateException("Remaining file length doesn't fit a record header at position: " + position);
+
+            if (journal.isOpened()) {
+                // If journal is open, it means the positions may be wrong due to
+                // compaction:
+                return false;
+            } else {
+                // If journal is not open yet, it means we are recovering and
+                // need to signal a failure:
+                throw new IllegalStateException("Remaining file length doesn't fit a record header at position: " + position);
+            }
         }
     }
 

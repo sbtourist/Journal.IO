@@ -26,7 +26,7 @@ import journal.io.util.IOHelper;
  */
 class DataFile implements Comparable<DataFile> {
 
-    private final File file;
+    private volatile File file;
     private final Integer dataFileId;
     private volatile Integer dataFileGeneration;
     private final AtomicLong length;
@@ -49,6 +49,10 @@ class DataFile implements Comparable<DataFile> {
 
     Integer getDataFileGeneration() {
         return dataFileGeneration;
+    }
+
+    public void setDataFileGeneration(Integer dataFileGeneration) {
+        this.dataFileGeneration = dataFileGeneration;
     }
     
     void incrementGeneration() {
@@ -80,11 +84,16 @@ class DataFile implements Comparable<DataFile> {
     }
 
     boolean delete() throws IOException {
-        return file.delete();
+        return IOHelper.deleteFile(file);
     }
 
     void move(File targetDirectory) throws IOException {
         IOHelper.moveFile(file, targetDirectory);
+    }
+    
+    void rename(File destination) throws IOException {
+        IOHelper.renameFile(file, destination);
+        this.file = destination;
     }
     
     void writeHeader() throws IOException {

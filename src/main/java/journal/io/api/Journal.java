@@ -155,8 +155,6 @@ public class Journal {
             recoveryErrorHandler = RecoveryErrorHandler.ABORT;
         }
 
-        opened = true;
-
         accessor = new DataFileAccessor(this);
         accessor.open();
 
@@ -205,6 +203,8 @@ public class Journal {
         if (lastAppendLocation == null) {
             lastAppendLocation = new Location(1, PRE_START_POINTER);
         }
+        
+        opened = true;
     }
 
     /**
@@ -676,6 +676,10 @@ public class Journal {
         return directory.toString();
     }
 
+    boolean isOpened() {
+        return opened;
+    }
+
     Executor getWriter() {
         return writer;
     }
@@ -806,11 +810,16 @@ public class Journal {
     private void compactDataFile(DataFile currentFile, Location firstUserLocation) throws IOException {
         accessor.pause();
         try {
+            // Configure new tmp file:
             DataFile tmpFile = new DataFile(
                     new File(currentFile.getFile().getParent(), filePrefix + currentFile.getDataFileId() + fileSuffix + ".tmp"),
                     currentFile.getDataFileId());
+            tmpFile.setDataFileGeneration(currentFile.getDataFileGeneration());
+            tmpFile.setNext(currentFile.getNext());
+            // Write header and batch containing data:
             tmpFile.writeHeader();
             RandomAccessFile raf = tmpFile.openRandomAccessFile();
+            Location tmpBatchLocation = null;
             try {
                 Location currentUserLocation = firstUserLocation;
                 WriteBatch batch = new WriteBatch(tmpFile, 0);
@@ -821,20 +830,26 @@ public class Journal {
                     batch.appendBatch(write);
                     currentUserLocation = goToNextLocation(currentUserLocation, Location.USER_RECORD_TYPE, false);
                 }
-                Location batchLocation = batch.perform(raf, true, true, null);
-                hints.put(batchLocation, batchLocation.getThisFilePosition());
+                // Only a single batch is used to keep data pointers the same!
+                // TODO: embed batch pointers into locations to support 
+                // multiple batches, so that when the batch pointer changes,
+                // a new batch is created during compaction.
+                tmpBatchLocation = batch.perform(raf, true, true, null);
             } finally {
                 if (raf != null) {
                     raf.close();
                 }
             }
             removeDataFile(currentFile);
+            dataFiles.put(tmpFile.getDataFileId(), tmpFile);
             totalLength.addAndGet(tmpFile.getLength());
-            IOHelper.renameFile(tmpFile.getFile(), currentFile.getFile());
-            dataFiles.put(currentFile.getDataFileId(), currentFile);
+            tmpFile.rename(currentFile.getFile());
+            // Add new hints:
+            assert tmpBatchLocation != null;
+            hints.put(tmpBatchLocation, tmpBatchLocation.getThisFilePosition());
             // Increment generation so that sequential reads from locations
             // referring to a different generation will not be valid:
-            currentFile.incrementGeneration();
+            tmpFile.incrementGeneration();
         } finally {
             accessor.resume();
         }
