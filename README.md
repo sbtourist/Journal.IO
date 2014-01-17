@@ -1,4 +1,4 @@
-# Journal.IO 1.4.1
+# Journal.IO 1.4.2
 
 Journal.IO is a lightweight, fast and easy-to-use journal storage implementation based on append-only rotating logs and checksummed variable-length records, 
 supporting concurrent reads and writes, dynamic batching, tunable durability and data compaction.
@@ -89,7 +89,7 @@ You can download Journal.IO via Maven repositories, here are the coordinates:
     <dependency>
         <groupId>com.github.sbtourist</groupId>
        <artifactId>journalio</artifactId>
-       <version>1.4.1</version>
+       <version>1.4.2</version>
     </dependency>
     
 ## Third Party Tools
@@ -129,3 +129,5 @@ Journal.IO is based on the HawtJournal project, for original copyright note see:
 [Sebastian Stoll](https://github.com/SebastianStoll) (Contributor)
 
 [Arek Burdach](https://github.com/arkadius) (Contributor)
+
+[Brandon Seibel](https://github.com/bseibel) (Contributor)
