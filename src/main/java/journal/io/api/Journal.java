@@ -203,7 +203,7 @@ public class Journal {
         if (lastAppendLocation == null) {
             lastAppendLocation = new Location(1, PRE_START_POINTER);
         }
-        
+
         opened = true;
     }
 
@@ -253,7 +253,7 @@ public class Journal {
                     } else {
                         Location firstDeletedLocation = goToFirstLocation(file, Location.DELETED_RECORD_TYPE, false);
                         if (firstDeletedLocation != null) {
-                            compactDataFile(file, firstUserLocation);
+                            compactDataFile(file);
                         }
                     }
                 }
@@ -693,9 +693,9 @@ public class Journal {
     }
 
     DataFile getDataFile(Integer id) throws CompactedDataFileException {
-        Entry<Integer, DataFile> first = dataFiles.firstEntry();
-        if (first != null && first.getKey() <= id) {
-            return dataFiles.get(id);
+        DataFile result = dataFiles.get(id);
+        if (result != null) {
+            return result;
         } else {
             throw new CompactedDataFileException(id);
         }
@@ -756,7 +756,7 @@ public class Journal {
     }
 
     private Location goToNextLocation(Location start, final byte type, final boolean goToNextFile) throws IOException {
-        DataFile currentDataFile = dataFiles.get(start.getDataFileId());
+        Integer currentDataFileId = start.getDataFileId();
         Location currentLocation = new Location(start);
         Location result = null;
         while (result == null) {
@@ -765,9 +765,10 @@ public class Journal {
                 result = currentLocation;
             } else {
                 if (goToNextFile) {
-                    currentDataFile = currentDataFile.getNext();
-                    if (currentDataFile != null) {
-                        currentLocation = accessor.readLocationDetails(currentDataFile.getDataFileId(), 0);
+                    Entry<Integer, DataFile> candidateDataFile = dataFiles.higherEntry(currentDataFileId);
+                    currentDataFileId = candidateDataFile != null ? candidateDataFile.getValue().getDataFileId() : null;
+                    if (currentDataFileId != null) {
+                        currentLocation = accessor.readLocationDetails(currentDataFileId, 0);
                         if (currentLocation != null && (currentLocation.getType() == type || type == Location.ANY_RECORD_TYPE)) {
                             result = currentLocation;
                         }
@@ -807,7 +808,7 @@ public class Journal {
         }
     }
 
-    private void compactDataFile(DataFile currentFile, Location firstUserLocation) throws IOException {
+    private void compactDataFile(DataFile currentFile) throws IOException {
         accessor.pause();
         try {
             // Configure new tmp file:
@@ -821,7 +822,7 @@ public class Journal {
             RandomAccessFile raf = tmpFile.openRandomAccessFile();
             Location tmpBatchLocation = null;
             try {
-                Location currentUserLocation = firstUserLocation;
+                Location currentUserLocation = goToFirstLocation(tmpFile, Location.USER_RECORD_TYPE, false);
                 WriteBatch batch = new WriteBatch(tmpFile, 0);
                 batch.prepareBatch();
                 while (currentUserLocation != null) {
@@ -1165,6 +1166,9 @@ public class Journal {
                         try {
                             current = next;
                             next = goToNextLocation(current, Location.USER_RECORD_TYPE, true);
+                            // TODO: reading the next next location at this point
+                            // (*before* the related hasNext call) is not
+                            // really correct.
                             return current;
                         } catch (IOException ex) {
                             throw new IllegalStateException(ex.getMessage(), ex);
