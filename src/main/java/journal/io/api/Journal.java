@@ -155,8 +155,6 @@ public class Journal {
             recoveryErrorHandler = RecoveryErrorHandler.ABORT;
         }
 
-        opened = true;
-
         accessor = new DataFileAccessor(this);
         accessor.open();
 
@@ -205,6 +203,8 @@ public class Journal {
         if (lastAppendLocation == null) {
             lastAppendLocation = new Location(1, PRE_START_POINTER);
         }
+
+        opened = true;
     }
 
     /**
@@ -242,26 +242,21 @@ public class Journal {
      */
     public synchronized void compact() throws ClosedJournalException, IOException {
         if (opened) {
-            accessor.pause();
-            try {
-                for (DataFile file : dataFiles.values()) {
-                    // Can't compact the data file (or subsequent files) that is currently being written to:
-                    if (file.getDataFileId() >= lastAppendLocation.getDataFileId()) {
-                        continue;
+            for (DataFile file : dataFiles.values()) {
+                // Can't compact the data file (or subsequent files) that is currently being written to:
+                if (file.getDataFileId() >= lastAppendLocation.getDataFileId()) {
+                    continue;
+                } else {
+                    Location firstUserLocation = goToFirstLocation(file, Location.USER_RECORD_TYPE, false);
+                    if (firstUserLocation == null) {
+                        removeDataFile(file);
                     } else {
-                        Location firstUserLocation = goToFirstLocation(file, Location.USER_RECORD_TYPE, false);
-                        if (firstUserLocation == null) {
-                            removeDataFile(file);
-                        } else {
-                            Location firstDeletedLocation = goToFirstLocation(file, Location.DELETED_RECORD_TYPE, false);
-                            if (firstDeletedLocation != null) {
-                                compactDataFile(file, firstUserLocation);
-                            }
+                        Location firstDeletedLocation = goToFirstLocation(file, Location.DELETED_RECORD_TYPE, false);
+                        if (firstDeletedLocation != null) {
+                            compactDataFile(file);
                         }
                     }
                 }
-            } finally {
-                accessor.resume();
             }
         } else {
             throw new ClosedJournalException("The journal is closed!");
@@ -681,6 +676,10 @@ public class Journal {
         return directory.toString();
     }
 
+    boolean isOpened() {
+        return opened;
+    }
+
     Executor getWriter() {
         return writer;
     }
@@ -694,9 +693,9 @@ public class Journal {
     }
 
     DataFile getDataFile(Integer id) throws CompactedDataFileException {
-        Entry<Integer, DataFile> first = dataFiles.firstEntry();
-        if (first != null && first.getKey() <= id) {
-            return dataFiles.get(id);
+        DataFile result = dataFiles.get(id);
+        if (result != null) {
+            return result;
         } else {
             throw new CompactedDataFileException(id);
         }
@@ -757,7 +756,7 @@ public class Journal {
     }
 
     private Location goToNextLocation(Location start, final byte type, final boolean goToNextFile) throws IOException {
-        DataFile currentDataFile = dataFiles.get(start.getDataFileId());
+        Integer currentDataFileId = start.getDataFileId();
         Location currentLocation = new Location(start);
         Location result = null;
         while (result == null) {
@@ -766,9 +765,10 @@ public class Journal {
                 result = currentLocation;
             } else {
                 if (goToNextFile) {
-                    currentDataFile = currentDataFile.getNext();
-                    if (currentDataFile != null) {
-                        currentLocation = accessor.readLocationDetails(currentDataFile.getDataFileId(), 0);
+                    Entry<Integer, DataFile> candidateDataFile = dataFiles.higherEntry(currentDataFileId);
+                    currentDataFileId = candidateDataFile != null ? candidateDataFile.getValue().getDataFileId() : null;
+                    if (currentDataFileId != null) {
+                        currentLocation = accessor.readLocationDetails(currentDataFileId, 0);
                         if (currentLocation != null && (currentLocation.getType() == type || type == Location.ANY_RECORD_TYPE)) {
                             result = currentLocation;
                         }
@@ -808,39 +808,49 @@ public class Journal {
         }
     }
 
-    private void compactDataFile(DataFile currentFile, Location firstUserLocation) throws IOException {
-        DataFile tmpFile = new DataFile(
-                new File(currentFile.getFile().getParent(), filePrefix + currentFile.getDataFileId() + fileSuffix + ".tmp"),
-                currentFile.getDataFileId());
-        tmpFile.writeHeader();
-        RandomAccessFile raf = tmpFile.openRandomAccessFile();
-        try {
-            Location currentUserLocation = firstUserLocation;
-            WriteBatch batch = new WriteBatch(tmpFile, 0);
-            batch.prepareBatch();
-            while (currentUserLocation != null) {
-                byte[] data = accessor.readLocation(currentUserLocation, false);
-                WriteCommand write = new WriteCommand(currentUserLocation, data, true);
-                batch.appendBatch(write);
-                currentUserLocation = goToNextLocation(currentUserLocation, Location.USER_RECORD_TYPE, false);
-            }
-            Location batchLocation = batch.perform(raf, true, true, null);
-            hints.put(batchLocation, batchLocation.getThisFilePosition());
-        } finally {
-            if (raf != null) {
-                raf.close();
-            }
-        }
+    private void compactDataFile(DataFile currentFile) throws IOException {
         accessor.pause();
         try {
-            accessor.dispose(currentFile);
-            totalLength.addAndGet(-currentFile.getLength());
+            // Configure new tmp file:
+            DataFile tmpFile = new DataFile(
+                    new File(currentFile.getFile().getParent(), filePrefix + currentFile.getDataFileId() + fileSuffix + ".tmp"),
+                    currentFile.getDataFileId());
+            tmpFile.setDataFileGeneration(currentFile.getDataFileGeneration());
+            tmpFile.setNext(currentFile.getNext());
+            // Write header and batch containing data:
+            tmpFile.writeHeader();
+            RandomAccessFile raf = tmpFile.openRandomAccessFile();
+            Location tmpBatchLocation = null;
+            try {
+                Location currentUserLocation = goToFirstLocation(tmpFile, Location.USER_RECORD_TYPE, false);
+                WriteBatch batch = new WriteBatch(tmpFile, 0);
+                batch.prepareBatch();
+                while (currentUserLocation != null) {
+                    byte[] data = accessor.readLocation(currentUserLocation, false);
+                    WriteCommand write = new WriteCommand(currentUserLocation, data, true);
+                    batch.appendBatch(write);
+                    currentUserLocation = goToNextLocation(currentUserLocation, Location.USER_RECORD_TYPE, false);
+                }
+                // Only a single batch is used to keep data pointers the same!
+                // TODO: embed batch pointers into locations to support 
+                // multiple batches, so that when the batch pointer changes,
+                // a new batch is created during compaction.
+                tmpBatchLocation = batch.perform(raf, true, true, null);
+            } finally {
+                if (raf != null) {
+                    raf.close();
+                }
+            }
+            removeDataFile(currentFile);
+            dataFiles.put(tmpFile.getDataFileId(), tmpFile);
             totalLength.addAndGet(tmpFile.getLength());
-            IOHelper.deleteFile(currentFile.getFile());
-            IOHelper.renameFile(tmpFile.getFile(), currentFile.getFile());
+            tmpFile.rename(currentFile.getFile());
+            // Add new hints:
+            assert tmpBatchLocation != null;
+            hints.put(tmpBatchLocation, tmpBatchLocation.getThisFilePosition());
             // Increment generation so that sequential reads from locations
             // referring to a different generation will not be valid:
-            currentFile.incrementGeneration();
+            tmpFile.incrementGeneration();
         } finally {
             accessor.resume();
         }
@@ -1156,6 +1166,9 @@ public class Journal {
                         try {
                             current = next;
                             next = goToNextLocation(current, Location.USER_RECORD_TYPE, true);
+                            // TODO: reading the next next location at this point
+                            // (*before* the related hasNext call) is not
+                            // really correct.
                             return current;
                         } catch (IOException ex) {
                             throw new IllegalStateException(ex.getMessage(), ex);

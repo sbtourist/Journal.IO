@@ -13,6 +13,8 @@
  */
 package journal.io.api;
 
+import java.io.IOException;
+import java.util.Random;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
@@ -57,31 +59,61 @@ public class ConcurrencyTest extends AbstractJournalTest {
 
     @Test
     public void testConcurrentCompactionDuringWriteAndRead() throws Exception {
+        Random rnd = new Random();
+        for (int i = 0; i < 50; i++) {
+            int iterations = rnd.nextInt(10000);
+            int deletions = rnd.nextInt(iterations);
+            System.out.println("testConcurrentCompactionDuringWriteAndRead with number of iterations: " + iterations + " and deletions: " + deletions);
+            doTestConcurrentCompactionDuringWriteAndRead(iterations, deletions);
+            tearDown();
+            setUp();
+        }
+    }
+
+    @Test
+    public void testConcurrentCompactionDuringRedoDeletes() throws Exception {
+        Random rnd = new Random();
+        for (int i = 0; i < 50; i++) {
+            int iterations = rnd.nextInt(10000);
+            int deletions = rnd.nextInt(iterations);
+            System.out.println("testConcurrentCompactionDuringRedoDeletes with number of iterations: " + iterations + " and deletions: " + deletions);
+            doTestConcurrentCompactionDuringRedoDeletes(iterations, deletions);
+            tearDown();
+            setUp();
+        }
+    }
+
+    @Override
+    protected boolean configure(Journal journal) {
+        journal.setMaxFileLength(1024);
+        journal.setMaxWriteBatchSize(1024);
+        return true;
+    }
+
+    private void doTestConcurrentCompactionDuringWriteAndRead(final int iterations, final int deletions) throws InterruptedException, IOException {
         final AtomicInteger iterationsCounter = new AtomicInteger(0);
         final AtomicInteger deletionsCounter = new AtomicInteger(0);
-        final CountDownLatch deletionsLatch = new CountDownLatch(1);
         final ExecutorService executor = Executors.newFixedThreadPool(10);
-        final int iterations = 1000;
-        final int deletions = 100;
         //
         for (int i = 0; i < iterations; i++) {
             final int index = i;
             executor.submit(new Runnable() {
                 public void run() {
                     try {
+                        Random rnd = new Random();
                         Journal.WriteType sync = index % 2 == 0 ? Journal.WriteType.SYNC : Journal.WriteType.ASYNC;
                         String write = new String("DATA" + index);
                         Location location = journal.write(write.getBytes("UTF-8"), sync);
                         String read = new String(journal.read(location, Journal.ReadType.ASYNC), "UTF-8");
                         if (read.equals("DATA" + index)) {
-                            if (index < deletions) {
+                            int thisDeletion = -1;
+                            if ((iterations - iterationsCounter.incrementAndGet() < deletions || rnd.nextInt() % 2 == 0)
+                                    && (thisDeletion = deletionsCounter.incrementAndGet()) <= deletions) {
                                 journal.delete(location);
-                                deletionsCounter.incrementAndGet();
+                                if (thisDeletion == deletions) {
+                                    journal.compact();
+                                }
                             }
-                            if (deletionsCounter.get() == deletions) {
-                                deletionsLatch.countDown();
-                            }
-                            iterationsCounter.incrementAndGet();
                         }
                     } catch (Exception ex) {
                         ex.printStackTrace();
@@ -89,16 +121,7 @@ public class ConcurrencyTest extends AbstractJournalTest {
                 }
             });
         }
-        executor.submit(new Runnable() {
-            public void run() {
-                try {
-                    deletionsLatch.await();
-                    journal.compact();
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }
-        });
+        //
         executor.shutdown();
         assertTrue(executor.awaitTermination(1, TimeUnit.MINUTES));
         assertEquals(iterations, iterationsCounter.get());
@@ -107,35 +130,36 @@ public class ConcurrencyTest extends AbstractJournalTest {
             locations++;
         }
         assertEquals(iterations - deletions, locations);
-        assertTrue(journal.getDataFiles().firstEntry().getKey() > 1);
     }
 
-    @Test
-    public void testConcurrentCompactionDuringRedoDeletes() throws Exception {
+    private void doTestConcurrentCompactionDuringRedoDeletes(final int iterations, final int deletions) throws Exception {
         final ExecutorService executor = Executors.newFixedThreadPool(10);
-        final AtomicInteger iterationsCounter = new AtomicInteger(0);
         final CountDownLatch deletionsLatch = new CountDownLatch(1);
-        final int iterations = 1000;
-        final int deletions = 100;
         //
         for (int i = 0; i < iterations; i++) {
             journal.write(new String("DATA" + i).getBytes("UTF-8"), Journal.WriteType.SYNC);
         }
         //
-        executor.submit(new Runnable() {
-            public void run() {
+        executor.submit(new Callable() {
+            public Object call() {
+                Location ignored = null;
                 try {
                     int i = 0;
                     for (Location location : journal.redo()) {
-                        journal.delete(location);
-                        if (++i == deletions) {
-                            deletionsLatch.countDown();
-                            break;
+                        i++;
+                        if (i <= deletions) {
+                            journal.delete(location);
+                            if (i == deletions) {
+                                deletionsLatch.countDown();
+                            }
+                        } else {
+                            ignored = location;
                         }
                     }
                 } catch (Exception ex) {
                     ex.printStackTrace();
                 }
+                return ignored;
             }
         });
         //
@@ -150,29 +174,12 @@ public class ConcurrencyTest extends AbstractJournalTest {
             }
         });
         //
-        executor.submit(new Runnable() {
-            public void run() {
-                try {
-                    deletionsLatch.await();
-                    for (Location current : journal.redo()) {
-                        iterationsCounter.incrementAndGet();
-                    }
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }
-        });
-        //
         executor.shutdown();
         assertTrue(executor.awaitTermination(1, TimeUnit.MINUTES));
-        assertTrue(journal.getDataFiles().firstEntry().getKey() > 1);
-        assertEquals(iterations - deletions, iterationsCounter.get());
-    }
-
-    @Override
-    protected boolean configure(Journal journal) {
-        journal.setMaxFileLength(1024);
-        journal.setMaxWriteBatchSize(1024);
-        return true;
+        int locations = 0;
+        for (Location current : journal.redo()) {
+            locations++;
+        }
+        assertEquals(iterations - deletions, locations);
     }
 }
