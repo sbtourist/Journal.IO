@@ -14,6 +14,7 @@
 package journal.io;
 
 import java.io.File;
+import java.nio.file.Files;
 import journal.io.api.Journal;
 import journal.io.api.JournalBuilder;
 import journal.io.api.Location;
@@ -30,9 +31,7 @@ public class ApiTest {
 
     @Before
     public void setUp() throws Exception {
-        JOURNAL_DIR = File.createTempFile("ApiTest", "journal", null);
-        JOURNAL_DIR.delete();
-        JOURNAL_DIR.mkdir();
+        JOURNAL_DIR = Files.createTempDirectory("ApiTest" + "journal").toFile();
     }
 
     @Test
